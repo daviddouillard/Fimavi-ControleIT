@@ -1,0 +1,89 @@
+name: TNR et déploiement
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tnr:
+    name: Typecheck, tests, E2E, audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Audit des dépendances (bloquant au-delà de modéré)
+        run: npm audit --omit=dev --audit-level=high
+
+  deploy:
+    name: Déploiement Cloud Run
+    needs: tnr
+    # Ne se déclenche qu'une fois l'infrastructure créée (variables posées par infra/gcp-setup.ps1).
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.GCP_WIF_PROVIDER != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PROJECT: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/controleit/controleit:${{ github.sha }}
+      INSTANCE: ${{ vars.GCP_PROJECT_ID }}:${{ vars.GCP_REGION }}:controleit-db
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Build et push de l'image
+        run: |
+          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Migrations et droits BDD (via Cloud SQL Auth Proxy)
+        run: |
+          curl -fsSL -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.27.0/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          ./cloud-sql-proxy --port 5432 "$INSTANCE" &
+          OWNER_PW=$(gcloud secrets versions access latest --secret controleit-db-owner-password --project "$PROJECT")
+          APP_PW=$(gcloud secrets versions access latest --secret controleit-db-app-password --project "$PROJECT")
+          echo "::add-mask::$OWNER_PW"
+          echo "::add-mask::$APP_PW"
+          for i in $(seq 1 30); do nc -z 127.0.0.1 5432 && break; sleep 1; done
+          export DATABASE_MIGRATION_URL="postgres://controleit_owner:${OWNER_PW}@127.0.0.1:5432/controleit"
+          npm run db:migrate
+          APP_DB_PASSWORD="$APP_PW" node scripts/db-grants.mjs
+
+      - name: Déploiement Cloud Run
+        run: |
+          gcloud run deploy controleit --project "$PROJECT" --region "$REGION" --image "$IMAGE" \
+            --service-account "controleit-run@${PROJECT}.iam.gserviceaccount.com" \
+            --add-cloudsql-instances "$INSTANCE" \
+            --memory 512Mi --cpu 1 --min-instances 0 --max-instances 3 \
+            --set-secrets "NUXT_APP_SECRET=controleit-app-secret:latest,NUXT_DATABASE_URL=controleit-database-url:latest,NUXT_OAUTH_MICROSOFT_CLIENT_SECRET=controleit-entra-client-secret:latest" \
+            --set-env-vars "NUXT_OAUTH_MICROSOFT_TENANT=${{ vars.ENTRA_TENANT_ID }},NUXT_OAUTH_MICROSOFT_CLIENT_ID=${{ vars.ENTRA_CLIENT_ID }},NUXT_ADMIN_ROLE=${{ vars.ENTRA_ADMIN_ROLE }},NUXT_OAUTH_MICROSOFT_REDIRECT_URL=https://controleit-${{ vars.GCP_PROJECT_NUMBER }}.${{ vars.GCP_REGION }}.run.app/auth/microsoft"
