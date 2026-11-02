@@ -149,8 +149,10 @@ if (-not (Exists { gcloud run services describe $Service --region $Region --proj
   Check 'gcloud run deploy $Service'
 }
 # L'application gère sa propre authentification (Entra ID) : le service doit être joignable publiquement.
-gcloud run services add-iam-policy-binding $Service --region $Region --project $Project --member=allUsers --role=roles/run.invoker | Out-Null
-Check 'gcloud run services add-iam-policy-binding'
+# La politique d'organisation interdit allUsers (partage restreint au domaine) : on désactive le contrôle IAM
+# de l'appelant sur ce seul service au lieu d'ajouter allUsers.
+gcloud run services update $Service --region $Region --project $Project --no-invoker-iam-check | Out-Null
+Check 'gcloud run services update --no-invoker-iam-check'
 
 Step 'Variables GitHub (non secrètes)'
 gh variable set GCP_PROJECT_ID --repo $Repo --body $Project
