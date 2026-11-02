@@ -9,9 +9,8 @@ import { hasRole } from '../../utils/idToken'
 export default defineEventHandler(async (event) => {
   const query = getQuery(event) as { code?: string, state?: string, error?: string }
 
-  if (!query.code && !query.error) return sendRedirect(event, buildAuthorizationUrl(event))
-
   try {
+    if (!query.code && !query.error) return sendRedirect(event, buildAuthorizationUrl(event))
     if (query.error) throw new Error(`Entra a refusé la connexion (${query.error})`)
     const claims = await handleCallback(event, query)
 
