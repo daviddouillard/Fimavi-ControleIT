@@ -35,8 +35,9 @@ Application web de **contrôles IT** : l'équipe IT (droit Entra spécifique) ou
 | Import fichiers | `papaparse` (CSV) / `exceljs` (XLSX) | Parsing **côté serveur uniquement** |
 | Sécurité HTTP | module `nuxt-security` | CSP, HSTS, rate limiting, limite taille requête |
 | Tests | **Vitest** + `@nuxt/test-utils` ; **Playwright** (E2E) | |
-| Déploiement | **GCP** : Cloud Run (conteneur) + Cloud SQL + Secret Manager | Projet GCP `Fimavi-ControleIT` (n° 445174732770) |
-| Source | GitHub `daviddouillard/Fimavi-ControleIT`, branche `main` | Ne pousser qu'avec l'accord de l'utilisateur |
+| Déploiement | **GCP** : Cloud Run (conteneur) + Cloud SQL + Secret Manager | Projet GCP `Fimavi-ControleIT` (n° 445174732770). **Un seul environnement : la prod** |
+| CI/CD | GitHub Actions → Artifact Registry → Cloud Run, authentification par Workload Identity Federation (aucune clé de compte de service) | Déploiement automatique sur push vers `main`, après TNR verts |
+| Source | GitHub `daviddouillard/Fimavi-ControleIT`, branche `main` | Claude est autorisé à pousser sur GitHub et à déployer sur GCP, après l'audit de sécurité et des TNR verts |
 
 ### Points de vigilance (versions actuelles)
 - **Nuxt ≥ 4.6** : les helpers serveur s'importent depuis `nuxt/server` (`defineEventHandler`, `readValidatedBody`, `getValidatedQuery`, `createError({ status })`…). Pour un upload, utiliser `event.req.formData()`.
@@ -66,15 +67,22 @@ Application web de **contrôles IT** : l'équipe IT (droit Entra spécifique) ou
 - **Session de contrôle** : instance d'un modèle (nom, période, statut `brouillon → ouverte → clôturée`).
 - **Élément à vérifier** (`check_item`) : une ligne extraite du fichier importé (données brutes en JSONB + champs normalisés).
   - Modèle SharePoint externe, V1 : **import d'un fichier CSV** des accès externes. V2 envisagée : collecte directe via Microsoft Graph (voir §6).
-- **Assignation** : élément → collaborateur (issu de l'annuaire Entra), **choisie manuellement par l'admin**. Le valideur est généralement le **N+1** du collaborateur concerné, pas le collaborateur lui-même. L'application peut **suggérer** un valideur, mais l'admin décide toujours.
-- **Réponse** : Oui (accès légitime) / Non (à retirer) + commentaire.
-- **Action de remédiation** : créée automatiquement sur réponse « Non », assignée à l'IT, statut `à faire → fait`. **V1 : retrait de l'accès fait manuellement par l'IT**, puis marqué « fait » dans l'application.
+  - **Les doublons sont supprimés à l'import** : une même combinaison ressource + bénéficiaire + droit ne crée qu'une ligne. La clé exacte sera définie avec le CSV réel. Le nombre de doublons écartés est affiché et tracé dans l'audit.
+- **Assignation** : élément → collaborateur (issu de l'annuaire Entra), **choisie manuellement par l'admin**, avec **sélection multiple** pour assigner plusieurs lignes d'un coup. Le valideur est généralement le **N+1** du collaborateur concerné, pas le collaborateur lui-même. L'application peut **suggérer** un valideur, mais l'admin décide toujours.
+- **Clôture d'une ligne sans validation** : l'admin peut clôturer une ligne sans l'assigner, quand l'accès est déjà connu comme légitime et qu'aucune validation n'est nécessaire. C'est tracé dans l'audit.
+- **Réponse** : Oui (accès légitime) / Non (à retirer). **Commentaire obligatoire si Non**, facultatif si Oui.
+  - Le valideur ne peut **que** répondre Oui/Non et commenter : il ne réaffecte rien et ne signale rien.
+  - Il peut **changer d'avis** tant que la session est ouverte. Chaque changement est tracé ; si une réponse passe de Non à Oui, l'action de retrait encore « à faire » est annulée.
+  - Il ne voit **que les lignes que l'admin lui a assignées**.
+- **Action de remédiation** : créée automatiquement sur réponse « Non ». Elle va dans un **pot commun de l'IT** (pas d'attribution nominative), statut `à faire → fait`. **V1 : retrait de l'accès fait manuellement par l'IT**, puis marqué « fait » dans l'application. Une action faite **disparaît de la liste à faire** et reste consultable dans l'historique, avec qui l'a traitée et quand.
+- **Pas d'échéance**, **pas d'export** et **pas de lien entre sessions** : chaque session repose la question, même pour un accès déjà validé auparavant.
+- **Un seul rôle admin** (pas de rôle lecture seule).
 - **Journal d'audit** : table **append-only** de toutes les actions (qui, quoi, quand, avant/après). Jamais de UPDATE/DELETE dessus.
 - **Rétention** : tout est conservé en base indéfiniment (sessions, réponses, audit). Pas de purge automatique.
 - **Notifications** : aucune en V1 (ni mail ni Teams). Prévu dans un second temps.
 
 ### Écrans
-- **Accueil admin** : sessions en cours, avancement (% répondu), réponses en attente, remédiations à traiter.
+- **Accueil admin** : sessions en cours, avancement (% répondu), réponses en attente, liste des accès à retirer (pot commun IT, bouton « Fait »).
 - **Détail session** : éléments, assignations, réponses, filtres, export.
 - **Historique** : navigation dans toutes les sessions (y compris clôturées) et dans le journal d'audit.
 - **Espace utilisateur** : liste de mes vérifications à faire / faites.
@@ -109,4 +117,4 @@ Application web de **contrôles IT** : l'équipe IT (droit Entra spécifique) ou
   - Identifier l'auteur du partage dans le journal d'audit Microsoft 365, puis suggérer son N+1 (`/users/{id}/manager`) comme valideur.
   - Notifications mail ou Teams et relances.
   - Retrait automatique de l'accès via Graph, avec validation de l'IT.
-  - Autres modèles de contrôle.
+  - Autres modèles de contrôle, définis au fur et à mesure : garder l'architecture plugin par modèle générique.
