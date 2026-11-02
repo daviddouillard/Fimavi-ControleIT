@@ -46,11 +46,12 @@ describe('listSessionSummaries', () => {
       { sessionId: session!.id, rowNumber: 1, data: {}, label: 'A', assigneeId: n1!.id, decision: 'keep' },
       { sessionId: session!.id, rowNumber: 2, data: {}, label: 'B', assigneeId: n1!.id, decision: 'remove' },
       { sessionId: session!.id, rowNumber: 3, data: {}, label: 'C', assigneeId: n1!.id },
-      { sessionId: session!.id, rowNumber: 4, data: {}, label: 'D' }
+      { sessionId: session!.id, rowNumber: 4, data: {}, label: 'D' },
+      { sessionId: session!.id, rowNumber: 5, data: {}, label: 'E', closedAt: new Date() }
     ]).returning()
     await db.insert(schema.remediations).values({ checkItemId: items[1]!.id })
 
     const [summary] = await listSessionSummaries(db as never)
-    expect(summary).toMatchObject({ totalItems: 4, answered: 2, unassigned: 1, remediationsTodo: 1 })
+    expect(summary).toMatchObject({ totalItems: 5, answered: 2, waiting: 1, unassigned: 1, closedWithoutValidation: 1, remediationsTodo: 1 })
   })
 })

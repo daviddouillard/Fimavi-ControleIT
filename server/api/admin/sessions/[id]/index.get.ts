@@ -1,18 +1,17 @@
 import { asc, eq } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
-import { createError, defineEventHandler, getRouterParam } from 'nuxt/server'
-import { uuidParamSchema } from '../../../../shared/schemas/session'
-import { checkItems, controlSessions, remediations, users } from '../../../db/schema'
-import { requireAdmin } from '../../../utils/authz'
-import { useDb } from '../../../utils/db'
+import { createError, defineEventHandler } from 'nuxt/server'
+import { checkItems, controlSessions, remediations, users } from '../../../../db/schema'
+import { requireAdmin } from '../../../../utils/authz'
+import { useDb } from '../../../../utils/db'
+import { requireUuidParam } from '../../../../utils/params'
 
 export default defineEventHandler(async (event) => {
   await requireAdmin(event)
-  const parsed = uuidParamSchema.safeParse(getRouterParam(event, 'id'))
-  if (!parsed.success) throw createError({ status: 400, message: 'Identifiant invalide' })
+  const sessionId = requireUuidParam(event, 'id')
 
   const db = useDb()
-  const [session] = await db.select().from(controlSessions).where(eq(controlSessions.id, parsed.data))
+  const [session] = await db.select().from(controlSessions).where(eq(controlSessions.id, sessionId))
   if (!session) throw createError({ status: 404, message: 'Session introuvable' })
 
   const assignee = alias(users, 'assignee')
@@ -26,6 +25,7 @@ export default defineEventHandler(async (event) => {
     decision: checkItems.decision,
     comment: checkItems.comment,
     respondedAt: checkItems.respondedAt,
+    closedAt: checkItems.closedAt,
     remediationStatus: remediations.status
   })
     .from(checkItems)

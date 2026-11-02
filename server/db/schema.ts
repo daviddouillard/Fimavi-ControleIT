@@ -2,7 +2,8 @@ import { bigserial, boolean, index, integer, jsonb, pgEnum, pgTable, text, times
 
 export const sessionStatus = pgEnum('session_status', ['draft', 'open', 'closed'])
 export const checkDecision = pgEnum('check_decision', ['keep', 'remove'])
-export const remediationStatus = pgEnum('remediation_status', ['todo', 'done'])
+/** cancelled : le valideur est revenu sur un « Non » avant que l'IT ait retiré l'accès. */
+export const remediationStatus = pgEnum('remediation_status', ['todo', 'done', 'cancelled'])
 
 /** Collaborateurs synchronisés depuis Entra ID (Microsoft Graph). */
 export const users = pgTable('users', {
@@ -53,6 +54,9 @@ export const checkItems = pgTable('check_items', {
   comment: text('comment'),
   respondedById: uuid('responded_by_id').references(() => users.id),
   respondedAt: timestamp('responded_at', { withTimezone: true }),
+  /** Ligne clôturée par l'admin sans validation (accès déjà connu comme légitime). */
+  closedById: uuid('closed_by_id').references(() => users.id),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
 }, t => [
   index('check_items_session_idx').on(t.sessionId),

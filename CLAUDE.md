@@ -51,7 +51,7 @@ Application web de **contrôles IT** : l'équipe IT (droit Entra spécifique) ou
 | `npm run dev` | Serveur de dev (nécessite un `.env`) |
 | `npm run typecheck` | Vérification TypeScript (serveur + pages) |
 | `npm run test` | Tests unitaires Vitest |
-| `npm run test:e2e` | Build + E2E Playwright (valeurs factices générées, sans BDD) |
+| `npm run test:e2e` | Build + E2E Playwright. Base PGlite exposée en TCP (`tests/e2e/support/db-server.ts`, données fixes dans `fixtures.ts`) ; utilisateurs connectés via un cookie scellé par le test (`support/session.ts`, à réaligner si Nuxt change son format de session). **Aucune route de test dans l'application** |
 | `npm run db:generate` / `db:migrate` | Migrations Drizzle |
 | `npm run audit:deps` | Audit des dépendances de production |
 
@@ -107,6 +107,8 @@ Application web de **contrôles IT** : l'équipe IT (droit Entra spécifique) ou
 - Variables d'environnement préfixées `NUXT_` et déclarées dans `nuxt.config.ts > runtimeConfig`.
 - Toute nouvelle variable d'environnement doit être ajoutée à `.env.example` dans le même changement.
 - Migrations Drizzle commitées ; jamais de modification manuelle du schéma en base.
+- Logique métier dans `server/services/` (fonctions prenant `db`, testées sur PGlite) ; les routes API ne font qu'authentifier, valider et déléguer.
+- Concurrence : verrouiller dans l'ordre session (`FOR SHARE`) → ligne → remédiation (`FOR UPDATE`), et conditionner les UPDATE au statut attendu.
 
 ---
 
