@@ -14,7 +14,12 @@ await client.connect()
 try {
   const { rowCount } = await client.query(`select 1 from pg_roles where rolname = 'controleit_app'`)
   const verb = rowCount ? 'ALTER' : 'CREATE'
-  await client.query(`${verb} ROLE controleit_app WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD ${client.escapeLiteral(appPassword)}`)
+  const password = client.escapeLiteral(appPassword)
+  // Sur Cloud SQL, le propriétaire n'est pas superutilisateur : il peut créer un rôle restreint, mais ne peut pas
+  // modifier ensuite l'attribut SUPERUSER. La mise à jour ne touche donc que le mot de passe.
+  await client.query(verb === 'CREATE'
+    ? `CREATE ROLE controleit_app WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD ${password}`
+    : `ALTER ROLE controleit_app WITH LOGIN PASSWORD ${password}`)
 
   await client.query(`
     GRANT CONNECT ON DATABASE ${client.escapeIdentifier(client.database)} TO controleit_app;
