@@ -36,7 +36,8 @@ Application web de **contrôles IT** : l'équipe IT (droit Entra spécifique) ou
 | Sécurité HTTP | module `nuxt-security` | CSP, HSTS, rate limiting, limite taille requête |
 | Tests | **Vitest** + `@nuxt/test-utils` ; **Playwright** (E2E) | |
 | Déploiement | **GCP** : Cloud Run (conteneur) + Cloud SQL + Secret Manager | Projet GCP `Fimavi-ControleIT` (n° 445174732770). **Un seul environnement : la prod** |
-| CI/CD | GitHub Actions → Artifact Registry → Cloud Run, authentification par Workload Identity Federation (aucune clé de compte de service) | Déploiement automatique sur push vers `main`, après TNR verts |
+| CI/CD | GitHub Actions (`.github/workflows/deploy.yml`) → Artifact Registry → Cloud Run, authentification par Workload Identity Federation (aucune clé de compte de service) | Déploiement automatique sur push vers `main`, après TNR verts. Infra créée une fois par `infra/gcp-setup.ps1`. Région `europe-west9` (Paris), Cloud SQL `controleit-db`, service `controleit` sur l'URL `*.run.app` |
+| gcloud local | Lancer via **PowerShell** (le shim bash ne trouve pas Python). Toujours passer `--project fimavi-controleit` : la config par défaut pointe sur un autre projet, ne pas la modifier | |
 | Source | GitHub `daviddouillard/Fimavi-ControleIT`, branche `main` | Claude est autorisé à pousser sur GitHub et à déployer sur GCP, après l'audit de sécurité et des TNR verts |
 
 ### Points de vigilance (versions actuelles)
