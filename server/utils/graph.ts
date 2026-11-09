@@ -56,6 +56,8 @@ export async function listDirectoryMembers(): Promise<GraphUser[]> {
     // On ne suit que des liens de pagination pointant vers Graph.
     if (!url.startsWith(GRAPH_ROOT)) throw new Error('Lien de pagination Graph inattendu')
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    // Jeton obtenu avant un changement de permissions (ex. consentement admin) : on le redemandera au prochain appel.
+    if (res.status === 401 || res.status === 403) cachedToken = undefined
     if (!res.ok) throw new Error(`Appel Graph en échec (${res.status})`)
     const page = usersPageSchema.parse(await res.json())
     result.push(...page.value)
