@@ -85,7 +85,8 @@ EnsureSecret 'controleit-app-secret' (NewPassword 48)
 EnsureSecret 'controleit-entra-client-secret' 'A-RENSEIGNER'
 # Le rôle applicatif (non superutilisateur) est créé par le pipeline via scripts/db-grants.mjs.
 $appPasswordStored = gcloud secrets versions access latest --secret controleit-db-app-password --project $Project
-EnsureSecret 'controleit-database-url' "postgres://controleit_app:$appPasswordStored@/$Database?host=/cloudsql/${Project}:${Region}:$Instance"
+# Accolades obligatoires : sans elles, PowerShell lit « $Database?host » comme un seul nom de variable (vide).
+EnsureSecret 'controleit-database-url' "postgres://controleit_app:${appPasswordStored}@/${Database}?host=/cloudsql/${Project}:${Region}:${Instance}"
 
 Step 'Utilisateur propriétaire Cloud SQL (migrations)'
 if ($ownerCreated) {
