@@ -1,0 +1,209 @@
+import { and, eq } from 'drizzle-orm'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import type { ControlModule } from '../../server/controls/types'
+import { auditLog, checkItems, collectionRuns, controlSessions, notifications, remediations, users } from '../../server/db/schema'
+import { assignItems, markRemediationDone, respondToCheck, setSessionStatus } from '../../server/services/checks'
+import { latestRun, runCollection, startCollection } from '../../server/services/collection'
+import { syncDirectory } from '../../server/services/directory'
+import { assignmentEmail, sendAssignmentEmails, type MailMessage } from '../../server/services/notifications'
+import { addConnection, addSite, deleteConnection, getSettings, saveDomains } from '../../server/services/settings'
+import type { Database } from '../../server/utils/db'
+import { createTestDb, seedSession, TEST_TENANT } from './helpers'
+
+let db: Database
+let close: () => Promise<void>
+
+beforeAll(async () => {
+  ({ db, close } = await createTestDb())
+})
+afterAll(() => close())
+
+const line = (n: number) => ({ dedupKey: `k${n}`, label: `Partage ${n}`, data: { resource: `Doc ${n}` } })
+
+describe('mauvaise attribution', () => {
+  it('rend la ligne à l\'admin avec le commentaire, annule le retrait à faire, puis repart à zéro à la réassignation', async () => {
+    const s = await seedSession(db)
+    const item = s.items[0]!
+    await assignItems(db, s.admin, s.session.id, { itemIds: [item.id], assigneeId: s.validator.id })
+    await respondToCheck(db, s.validator, item.id, { decision: 'remove', comment: 'À couper' })
+
+    const result = await respondToCheck(db, s.validator, item.id, { decision: 'reassign', comment: 'Voir Paul, service achats' })
+    expect(result.remediation).toBe('cancelled')
+    const [flagged] = await db.select().from(checkItems).where(eq(checkItems.id, item.id))
+    expect(flagged).toMatchObject({ decision: 'reassign', assigneeId: null, comment: 'Voir Paul, service achats' })
+
+    // Le valideur ne voit plus la ligne et ne peut plus y répondre.
+    await expect(respondToCheck(db, s.validator, item.id, { decision: 'keep', comment: 'x' })).rejects.toMatchObject({ status: 404 })
+
+    const assigned = await assignItems(db, s.admin, s.session.id, { itemIds: [item.id], assigneeId: s.other.id })
+    expect(assigned.assigned).toBe(1)
+    const [reassigned] = await db.select().from(checkItems).where(eq(checkItems.id, item.id))
+    expect(reassigned).toMatchObject({ decision: null, comment: null, assigneeId: s.other.id })
+
+    // Le signalement reste dans l'audit de la réassignation.
+    const [audit] = await db.select().from(auditLog).where(and(eq(auditLog.sessionId, s.session.id), eq(auditLog.action, 'check.assign'))).orderBy(auditLog.id)
+      .then(rows => rows.slice(-1))
+    expect(JSON.stringify(audit!.before)).toContain('Voir Paul, service achats')
+
+    // Le nouveau valideur demande l'arrêt : le retrait annulé est réactivé.
+    expect((await respondToCheck(db, s.other, item.id, { decision: 'remove', comment: 'Confirmé' })).remediation).toBe('reopened')
+    const [remediation] = await db.select().from(remediations).where(eq(remediations.checkItemId, item.id))
+    expect(remediation!.status).toBe('todo')
+
+    // Accès retiré par l'IT : la ligne ne peut plus repartir en réattribution.
+    await markRemediationDone(db, s.admin, remediation!.id, undefined)
+    await expect(respondToCheck(db, s.other, item.id, { decision: 'reassign', comment: 'Pas moi' })).rejects.toMatchObject({ status: 409 })
+  })
+})
+
+describe('collecte', () => {
+  const module = (batches: ReturnType<typeof line>[][], fail?: string): ControlModule => ({
+    async collect(ctx) {
+      for (const batch of batches) await ctx.addLines(batch)
+      await ctx.siteError('https://x.sharepoint.com/sites/b', 'Accès refusé')
+      if (fail) throw new Error(fail)
+    }
+  })
+
+  it('exige les domaines internes, une session en brouillon et une seule collecte à la fois', async () => {
+    const s = await seedSession(db, 'draft')
+    await saveDomains(db, s.admin, [])
+    await expect(startCollection(db, s.admin, s.session.id)).rejects.toMatchObject({ status: 400 })
+
+    await saveDomains(db, s.admin, ['fimavi.com'])
+    const run = await startCollection(db, s.admin, s.session.id)
+    await expect(startCollection(db, s.admin, s.session.id)).rejects.toMatchObject({ status: 409 })
+    await runCollection(db, run.id, module([]))
+
+    const open = await seedSession(db, 'open')
+    await expect(startCollection(db, open.admin, open.session.id)).rejects.toMatchObject({ status: 409 })
+  })
+
+  it('ajoute les lignes en écartant les doublons, y compris à la relance', async () => {
+    const s = await seedSession(db, 'draft')
+    await saveDomains(db, s.admin, ['fimavi.com'])
+
+    const first = await startCollection(db, s.admin, s.session.id)
+    await runCollection(db, first.id, module([[line(1), line(2)], [line(2), line(3)]]))
+    const done = await latestRun(db, s.session.id)
+    expect(done).toMatchObject({ status: 'succeeded', progress: { added: 3, duplicates: 1, errors: [{ message: 'Accès refusé' }] } })
+
+    const second = await startCollection(db, s.admin, s.session.id)
+    await runCollection(db, second.id, module([[line(3), line(4)]]))
+    expect((await latestRun(db, s.session.id))!.progress).toMatchObject({ added: 1, duplicates: 1 })
+
+    const rows = await db.select({ rowNumber: checkItems.rowNumber, key: checkItems.dedupKey }).from(checkItems)
+      .where(eq(checkItems.sessionId, s.session.id)).orderBy(checkItems.rowNumber)
+    // 4 lignes du jeu d'essai + 4 collectées, numérotées à la suite.
+    expect(rows.filter(r => r.key).map(r => [r.key, r.rowNumber])).toEqual([['k1', 5], ['k2', 6], ['k3', 7], ['k4', 8]])
+  })
+
+  it('consigne un échec et libère la session pour une relance', async () => {
+    const s = await seedSession(db, 'draft')
+    await saveDomains(db, s.admin, ['fimavi.com'])
+    const run = await startCollection(db, s.admin, s.session.id)
+    await runCollection(db, run.id, module([[line(1)]], 'Graph indisponible'))
+    expect(await latestRun(db, s.session.id)).toMatchObject({ status: 'failed', error: 'Graph indisponible' })
+    await expect(startCollection(db, s.admin, s.session.id)).resolves.toBeTruthy()
+  })
+
+  it('interdit l\'ouverture pendant la collecte et n\'ajoute plus rien une fois la session sortie du brouillon', async () => {
+    const s = await seedSession(db, 'draft')
+    await saveDomains(db, s.admin, ['fimavi.com'])
+    const run = await startCollection(db, s.admin, s.session.id)
+    await expect(setSessionStatus(db, s.admin, s.session.id, 'open')).rejects.toMatchObject({ status: 409 })
+
+    // Session ouverte par un autre chemin pendant la collecte : les lignes suivantes sont refusées.
+    await db.update(controlSessions).set({ status: 'open' }).where(eq(controlSessions.id, s.session.id))
+    await runCollection(db, run.id, module([[line(1)]]))
+    expect(await latestRun(db, s.session.id)).toMatchObject({ status: 'failed', error: expect.stringContaining('brouillon') })
+    expect(await db.select().from(checkItems).where(and(eq(checkItems.sessionId, s.session.id), eq(checkItems.dedupKey, 'k1')))).toHaveLength(0)
+  })
+
+  it('considère comme interrompue une collecte sans signe de vie', async () => {
+    const s = await seedSession(db, 'draft')
+    await saveDomains(db, s.admin, ['fimavi.com'])
+    const run = await startCollection(db, s.admin, s.session.id)
+    await db.update(collectionRuns).set({ heartbeatAt: new Date(Date.now() - 10 * 60 * 1000) }).where(eq(collectionRuns.id, run.id))
+    expect(await latestRun(db, s.session.id)).toMatchObject({ status: 'failed', error: 'Collecte interrompue' })
+  })
+})
+
+describe('emails aux valideurs', () => {
+  it('n\'écrit qu\'aux valideurs ayant des lignes en attente, trace chaque envoi et chaque échec', async () => {
+    const s = await seedSession(db, 'open')
+    await assignItems(db, s.admin, s.session.id, { itemIds: [s.items[0]!.id, s.items[1]!.id], assigneeId: s.validator.id })
+    await assignItems(db, s.admin, s.session.id, { itemIds: [s.items[2]!.id], assigneeId: s.other.id })
+
+    const sent: MailMessage[] = []
+    const mailer = async (m: MailMessage) => {
+      sent.push(m)
+    }
+    // s.other n'a pas d'adresse : échec tracé ; s.disabled n'a aucune ligne : ignoré.
+    const result = await sendAssignmentEmails(db, s.admin, s.session.id, [s.validator.id, s.other.id, s.disabled.id], { mailer, appUrl: 'https://app.test' })
+    expect(result).toEqual({ sent: 1, failed: 1, skipped: 1 })
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toMatchObject({ to: 'n1@fimavi.test' })
+    expect(sent[0]!.subject).toContain('2 vérifications')
+
+    const rows = await db.select().from(notifications).where(eq(notifications.sessionId, s.session.id))
+    expect(rows.map(r => r.status).sort()).toEqual(['failed', 'sent'])
+
+    // Relance : nouvel envoi, historisé à côté du premier.
+    await sendAssignmentEmails(db, s.admin, s.session.id, [s.validator.id], { mailer, appUrl: 'https://app.test' })
+    expect(await db.select().from(notifications).where(and(eq(notifications.sessionId, s.session.id), eq(notifications.recipientId, s.validator.id)))).toHaveLength(2)
+  })
+
+  it('refuse l\'envoi sur une session en brouillon', async () => {
+    const s = await seedSession(db, 'draft')
+    await expect(sendAssignmentEmails(db, s.admin, s.session.id, [s.validator.id], { mailer: async () => {}, appUrl: 'https://app.test' }))
+      .rejects.toMatchObject({ status: 409 })
+  })
+
+  it('échappe le nom de la session et du destinataire dans le HTML', () => {
+    const mail = assignmentEmail({ recipientName: '<b>Jean</b>', sessionName: 'Revue <script>alert(1)</script>', pending: 1, appUrl: 'https://app.test' })
+    expect(mail.html).not.toContain('<script>')
+    expect(mail.html).toContain('&lt;b&gt;Jean&lt;/b&gt;')
+  })
+})
+
+describe('paramètres et annuaire multi-tenant', () => {
+  it('raccorde des tenants et des sites, sans doublon, et ne retire un tenant qu\'une fois vidé', async () => {
+    const s = await seedSession(db)
+    const tenant = await addConnection(db, s.admin, { name: 'Filiale', tenantId: '22222222-2222-2222-2222-222222222222' })
+    await expect(addConnection(db, s.admin, { name: 'Doublon', tenantId: '22222222-2222-2222-2222-222222222222' })).rejects.toMatchObject({ status: 409 })
+    await addSite(db, s.admin, { connectionId: tenant.id, url: 'https://filiale.sharepoint.com/sites/rh' })
+    await expect(addSite(db, s.admin, { connectionId: tenant.id, url: 'https://filiale.sharepoint.com/sites/rh' })).rejects.toMatchObject({ status: 409 })
+    await expect(deleteConnection(db, s.admin, tenant.id)).rejects.toMatchObject({ status: 409 })
+    expect((await getSettings(db)).sites.some(site => site.url === 'https://filiale.sharepoint.com/sites/rh')).toBe(true)
+  })
+
+  it('synchronise chaque tenant, isole les échecs et rattache les comptes historiques au tenant principal', async () => {
+    const s = await seedSession(db)
+    const [legacy] = await db.insert(users).values({ tenantId: '', entraId: 'legacy-oid', displayName: 'Ancien compte' }).returning()
+    await addConnection(db, s.admin, { name: 'Filiale KO', tenantId: '33333333-3333-3333-3333-333333333333' })
+
+    const results = await syncDirectory(db, s.admin, TEST_TENANT, async (tenant) => {
+      if (tenant === '33333333-3333-3333-3333-333333333333') throw new Error('Consentement manquant')
+      if (tenant === '22222222-2222-2222-2222-222222222222') return [{ id: 'same-oid', displayName: 'Filiale User', mail: 'u@filiale.fr', userPrincipalName: null, jobTitle: null, department: null, accountEnabled: true }]
+      return [{ id: 'legacy-oid', displayName: 'Ancien compte (maj)', mail: null, userPrincipalName: null, jobTitle: null, department: null, accountEnabled: true },
+        { id: 'same-oid', displayName: 'Homonyme principal', mail: null, userPrincipalName: null, jobTitle: null, department: null, accountEnabled: true }]
+    })
+
+    expect(results.find(r => r.name === 'Filiale KO')).toMatchObject({ count: 0, error: 'Consentement manquant' })
+    expect(results.find(r => r.tenantId === TEST_TENANT)).toMatchObject({ count: 2 })
+    const [claimed] = await db.select().from(users).where(eq(users.id, legacy!.id))
+    expect(claimed).toMatchObject({ tenantId: TEST_TENANT, displayName: 'Ancien compte (maj)' })
+    // Même object ID dans deux tenants : deux comptes distincts.
+    expect(await db.select().from(users).where(eq(users.entraId, 'same-oid'))).toHaveLength(2)
+  })
+})
+
+describe('session de contrôle', () => {
+  it('conserve la configuration du modèle', async () => {
+    const s = await seedSession(db, 'draft')
+    await db.update(controlSessions).set({ config: { siteIds: ['a'] } }).where(eq(controlSessions.id, s.session.id))
+    const [row] = await db.select().from(controlSessions).where(eq(controlSessions.id, s.session.id))
+    expect(row!.config).toEqual({ siteIds: ['a'] })
+  })
+})

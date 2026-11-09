@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { assignSchema, responseSchema } from '../../shared/schemas/checks'
 
 describe('responseSchema', () => {
-  it('exige un commentaire quand la réponse est Non', () => {
-    expect(responseSchema.safeParse({ decision: 'remove' }).success).toBe(false)
-    expect(responseSchema.safeParse({ decision: 'remove', comment: '   ' }).success).toBe(false)
-    expect(responseSchema.safeParse({ decision: 'remove', comment: 'Prestataire parti' }).success).toBe(true)
+  it.each(['keep', 'remove', 'reassign'])('exige toujours un commentaire (%s)', (decision) => {
+    expect(responseSchema.safeParse({ decision }).success).toBe(false)
+    expect(responseSchema.safeParse({ decision, comment: '   ' }).success).toBe(false)
+    expect(responseSchema.safeParse({ decision, comment: 'Justification' }).success).toBe(true)
   })
 
-  it('rend le commentaire facultatif quand la réponse est Oui', () => {
-    expect(responseSchema.safeParse({ decision: 'keep' }).success).toBe(true)
+  it('limite la longueur du commentaire', () => {
+    expect(responseSchema.safeParse({ decision: 'keep', comment: 'x'.repeat(2001) }).success).toBe(false)
   })
 
   it('refuse une décision inconnue', () => {

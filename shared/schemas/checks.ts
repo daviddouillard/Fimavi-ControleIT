@@ -3,12 +3,13 @@ import { z } from 'zod'
 /** Liste d'identifiants de lignes, dédoublonnée. */
 export const itemIdsSchema = z.array(z.uuid()).min(1).max(1000).transform(ids => [...new Set(ids)])
 
+/**
+ * Réponse du valideur : valider le partage, l'arrêter, ou signaler une mauvaise attribution.
+ * Le commentaire est toujours obligatoire (justification, ou personne qui devrait répondre).
+ */
 export const responseSchema = z.object({
-  decision: z.enum(['keep', 'remove']),
-  comment: z.string().trim().max(2000).optional()
-}).refine(r => r.decision === 'keep' || (r.comment?.length ?? 0) > 0, {
-  message: 'Le commentaire est obligatoire quand l\'accès doit être retiré',
-  path: ['comment']
+  decision: z.enum(['keep', 'remove', 'reassign']),
+  comment: z.string().trim().min(1, 'Le commentaire est obligatoire').max(2000)
 })
 
 export const assignSchema = z.object({
@@ -26,6 +27,10 @@ export const sessionStatusSchema = z.object({
 
 export const remediationDoneSchema = z.object({
   note: z.string().trim().max(1000).optional()
+})
+
+export const notifySchema = z.object({
+  recipientIds: z.array(z.uuid()).min(1).max(100).transform(ids => [...new Set(ids)])
 })
 
 export const userSearchSchema = z.object({

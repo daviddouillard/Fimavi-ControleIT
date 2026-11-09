@@ -23,7 +23,7 @@ describe('assignItems', () => {
   it('assigne uniquement les lignes en attente de la session', async () => {
     const s = await seedSession(db)
     const other = await seedSession(db)
-    await db.update(checkItems).set({ decision: 'keep' }).where(eq(checkItems.id, s.items[1]!.id))
+    await db.update(checkItems).set({ decision: 'keep', comment: 'OK' }).where(eq(checkItems.id, s.items[1]!.id))
     await db.update(checkItems).set({ closedAt: new Date() }).where(eq(checkItems.id, s.items[2]!.id))
 
     const result = await assignItems(db, s.admin, s.session.id, {
@@ -56,7 +56,7 @@ describe('respondToCheck', () => {
     expect((await respondToCheck(db, s.validator, item.id, { decision: 'remove', comment: 'Prestataire parti' })).remediation).toBe('created')
     expect((await remediationOf(item.id))!.status).toBe('todo')
 
-    expect((await respondToCheck(db, s.validator, item.id, { decision: 'keep' })).remediation).toBe('cancelled')
+    expect((await respondToCheck(db, s.validator, item.id, { decision: 'keep', comment: 'OK' })).remediation).toBe('cancelled')
     expect((await remediationOf(item.id))!.status).toBe('cancelled')
 
     expect((await respondToCheck(db, s.validator, item.id, { decision: 'remove', comment: 'Finalement non' })).remediation).toBe('reopened')
@@ -73,7 +73,7 @@ describe('respondToCheck', () => {
     await respondToCheck(db, s.validator, item.id, { decision: 'remove', comment: 'À retirer' })
     await markRemediationDone(db, s.admin, (await remediationOf(item.id))!.id, 'Retiré dans SharePoint')
 
-    const result = await respondToCheck(db, s.validator, item.id, { decision: 'keep' })
+    const result = await respondToCheck(db, s.validator, item.id, { decision: 'keep', comment: 'OK' })
     expect(result.remediation).toBe('already_removed')
     expect((await remediationOf(item.id))!.status).toBe('done')
   })
@@ -87,7 +87,7 @@ describe('respondToCheck', () => {
 
     await Promise.allSettled([
       markRemediationDone(db, s.admin, remediation.id, undefined),
-      respondToCheck(db, s.validator, item.id, { decision: 'keep' })
+      respondToCheck(db, s.validator, item.id, { decision: 'keep', comment: 'OK' })
     ])
     const final = (await remediationOf(item.id))!.status
     const done = (await listRemediations(db, 'done')).some(r => r.id === remediation.id)
@@ -99,16 +99,16 @@ describe('respondToCheck', () => {
     const s = await seedSession(db)
     await assignItems(db, s.admin, s.session.id, { assigneeId: s.validator.id, itemIds: [s.items[0]!.id, s.items[1]!.id] })
 
-    await expect(respondToCheck(db, s.other, s.items[0]!.id, { decision: 'keep' })).rejects.toMatchObject({ status: 404 })
-    await expect(respondToCheck(db, s.validator, s.items[3]!.id, { decision: 'keep' })).rejects.toMatchObject({ status: 404 })
-    await expect(respondToCheck(db, s.validator, crypto.randomUUID(), { decision: 'keep' })).rejects.toMatchObject({ status: 404 })
+    await expect(respondToCheck(db, s.other, s.items[0]!.id, { decision: 'keep', comment: 'OK' })).rejects.toMatchObject({ status: 404 })
+    await expect(respondToCheck(db, s.validator, s.items[3]!.id, { decision: 'keep', comment: 'OK' })).rejects.toMatchObject({ status: 404 })
+    await expect(respondToCheck(db, s.validator, crypto.randomUUID(), { decision: 'keep', comment: 'OK' })).rejects.toMatchObject({ status: 404 })
 
     await closeItemsWithoutValidation(db, s.admin, s.session.id, [s.items[1]!.id])
-    await expect(respondToCheck(db, s.validator, s.items[1]!.id, { decision: 'keep' })).rejects.toMatchObject({ status: 404 })
+    await expect(respondToCheck(db, s.validator, s.items[1]!.id, { decision: 'keep', comment: 'OK' })).rejects.toMatchObject({ status: 404 })
 
     const draft = await seedSession(db, 'draft')
     await assignItems(db, draft.admin, draft.session.id, { assigneeId: draft.validator.id, itemIds: [draft.items[0]!.id] })
-    await expect(respondToCheck(db, draft.validator, draft.items[0]!.id, { decision: 'keep' })).rejects.toMatchObject({ status: 409 })
+    await expect(respondToCheck(db, draft.validator, draft.items[0]!.id, { decision: 'keep', comment: 'OK' })).rejects.toMatchObject({ status: 409 })
   })
 })
 

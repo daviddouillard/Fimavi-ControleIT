@@ -29,9 +29,16 @@ GRANT SELECT, INSERT, UPDATE ON users, control_sessions, check_items, remediatio
 GRANT SELECT, INSERT ON audit_log TO controleit_app;
 REVOKE UPDATE, DELETE, TRUNCATE ON audit_log FROM controleit_app;
 GRANT USAGE ON SEQUENCE audit_log_id_seq TO controleit_app;
+-- Collectes et emails envoyés : historique, sans suppression
+GRANT SELECT, INSERT, UPDATE ON collection_runs TO controleit_app;
+GRANT SELECT, INSERT ON notifications TO controleit_app;
+-- Paramètres (tenants, sites, domaines internes) : suppression autorisée, chaque changement est tracé dans l'audit
+GRANT SELECT, INSERT, UPDATE, DELETE ON tenant_connections, sharepoint_sites, internal_domains TO controleit_app;
 ```
 
-Aucune suppression physique n'est accordée au rôle applicatif : l'historique est conservé en totalité.
+Ces droits sont appliqués automatiquement par `scripts/db-grants.mjs` à chaque déploiement.
+
+Aucune suppression physique n'est accordée sur les données métier : l'historique est conservé en totalité. Seuls les paramètres peuvent être supprimés.
 
 ## Recommandation complémentaire
 

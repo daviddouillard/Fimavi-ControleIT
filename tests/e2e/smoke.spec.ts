@@ -42,7 +42,7 @@ test("la page de connexion se charge sans violation CSP ni erreur JS", async ({ 
 })
 
 test.describe('API protégées', () => {
-  for (const path of ['/api/me/checks', '/api/admin/sessions', '/api/admin/audit']) {
+  for (const path of ['/api/me/checks', '/api/admin/sessions', '/api/admin/audit', '/api/admin/settings']) {
     test(`GET ${path} sans session → 401`, async ({ request }) => {
       const res = await request.get(path)
       expect(res.status()).toBe(401)

@@ -1,6 +1,9 @@
 /** Identifiants fixes des données E2E, partagés entre le serveur de base et les tests. */
 export const E2E_DB_PORT = 5499
 
+/** Tenant principal de l'environnement E2E (NUXT_OAUTH_MICROSOFT_TENANT). */
+export const E2E_TENANT = '11111111-1111-1111-1111-111111111111'
+
 export const IDS = {
   admin: '00000000-0000-4000-8000-0000000000a1',
   validator: '00000000-0000-4000-8000-0000000000b1',

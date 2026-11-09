@@ -5,7 +5,8 @@ import { hasRole, verifyIdToken } from '../../server/utils/idToken'
 const tenant = '11111111-1111-1111-1111-111111111111'
 const clientId = '22222222-2222-2222-2222-222222222222'
 const nonce = 'nonce-123'
-const expected = { clientId, tenant, nonce }
+const subsidiary = '33333333-3333-3333-3333-333333333333'
+const expected = { clientId, tenants: new Set([tenant, subsidiary]), nonce }
 
 let sign: (claims: Record<string, unknown>, opts?: { expiresIn?: string, issuer?: string, audience?: string }) => Promise<string>
 let keys: ReturnType<typeof createLocalJWKSet>
@@ -58,7 +59,17 @@ describe('verifyIdToken', () => {
     await expect(verifyIdToken(await sign(baseClaims, opts), expected, keys)).rejects.toThrow()
   })
 
-  it('refuse un tenant ou un nonce différent', async () => {
+  it('accepte un tenant filiale raccordé, avec son propre émetteur', async () => {
+    const token = await sign({ ...baseClaims, tid: subsidiary }, { issuer: `https://login.microsoftonline.com/${subsidiary}/v2.0` })
+    expect((await verifyIdToken(token, expected, keys)).tid).toBe(subsidiary)
+  })
+
+  it("refuse un émetteur qui ne correspond pas au tenant du jeton", async () => {
+    // tid filiale mais émis au nom du tenant principal (ou l'inverse) : refusé.
+    await expect(verifyIdToken(await sign({ ...baseClaims, tid: subsidiary }), expected, keys)).rejects.toThrow()
+  })
+
+  it('refuse un tenant non raccordé ou un nonce différent', async () => {
     await expect(verifyIdToken(await sign({ ...baseClaims, tid: 'autre' }), expected, keys)).rejects.toThrow('tenant')
     await expect(verifyIdToken(await sign({ ...baseClaims, nonce: 'rejoué' }), expected, keys)).rejects.toThrow('nonce')
   })

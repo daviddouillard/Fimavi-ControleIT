@@ -1,15 +1,18 @@
-import { and, desc, eq, ilike, inArray, isNull, or } from 'drizzle-orm'
+import { and, desc, eq, gt, ilike, inArray, isNull, or } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import { createError, type RequestEvent } from 'nuxt/server'
 import type { ResponseInput } from '../../shared/schemas/checks'
-import { checkItems, controlSessions, remediations, users } from '../db/schema'
+import { checkItems, collectionRuns, controlSessions, remediations, users } from '../db/schema'
 import { recordAudit } from '../utils/audit'
 import type { Database } from '../utils/db'
 
 export interface Actor { id: string }
 
-/** Ligne modifiable : ni répondue, ni clôturée sans validation. */
-const isPending = and(isNull(checkItems.decision), isNull(checkItems.closedAt))
+/**
+ * Ligne que l'admin peut (ré)assigner ou clôturer : sans réponse, ou signalée comme mal attribuée,
+ * et non clôturée sans validation.
+ */
+const isAssignable = and(or(isNull(checkItems.decision), eq(checkItems.decision, 'reassign')), isNull(checkItems.closedAt))
 
 /**
  * Verrou partagé sur la session : une clôture concurrente (UPDATE dans setSessionStatus) attend la fin de la
@@ -29,9 +32,10 @@ async function requireSessionNotClosed(db: Pick<Database, 'select'>, sessionId: 
 }
 
 /**
- * Réponse du valideur (Oui = conserver, Non = retirer). Il peut changer d'avis tant que la session est ouverte :
- * un « Non » crée ou réactive l'action de retrait, un retour à « Oui » annule celle encore à faire.
- * Un retrait déjà effectué par l'IT n'est jamais annulé : le retour à « Oui » est alors tracé comme tel.
+ * Réponse du valideur : valider (keep), arrêter le partage (remove) ou mauvaise attribution (reassign).
+ * Il peut changer d'avis tant que la session est ouverte : « arrêter » crée ou réactive l'action de retrait,
+ * un autre choix annule celle encore à faire. Un retrait déjà effectué par l'IT n'est jamais annulé.
+ * « Mauvaise attribution » rend la ligne à l'admin (plus de valideur) avec le commentaire indiquant qui devrait répondre.
  */
 export async function respondToCheck(db: Database, actor: Actor, itemId: string, input: ResponseInput, event?: RequestEvent) {
   return db.transaction(async (tx) => {
@@ -44,13 +48,23 @@ export async function respondToCheck(db: Database, actor: Actor, itemId: string,
     if (!item || item.assigneeId !== actor.id || item.closedAt) throw createError({ status: 404, message: 'Vérification introuvable' })
     if (sessionStatus !== 'open') throw createError({ status: 409, message: 'La session n\'est pas ouverte' })
 
-    const comment = input.comment ? input.comment : null
-    await tx.update(checkItems)
-      .set({ decision: input.decision, comment, respondedById: actor.id, respondedAt: new Date() })
-      .where(eq(checkItems.id, itemId))
-
     // Verrou sur la remédiation : un « Fait » concurrent de l'IT est sérialisé avec ce changement d'avis.
     const [remediation] = await tx.select().from(remediations).where(eq(remediations.checkItemId, itemId)).for('update')
+    if (input.decision === 'reassign' && remediation?.status === 'done') {
+      throw createError({ status: 409, message: 'L\'accès a déjà été retiré par l\'IT : la ligne ne peut plus être réattribuée' })
+    }
+
+    const comment = input.comment
+    await tx.update(checkItems)
+      .set({
+        decision: input.decision,
+        comment,
+        respondedById: actor.id,
+        respondedAt: new Date(),
+        ...(input.decision === 'reassign' ? { assigneeId: null } : {})
+      })
+      .where(eq(checkItems.id, itemId))
+
     let remediationChange: 'created' | 'reopened' | 'cancelled' | 'already_removed' | null = null
     if (input.decision === 'remove') {
       if (!remediation) {
@@ -73,15 +87,18 @@ export async function respondToCheck(db: Database, actor: Actor, itemId: string,
       entityType: 'check_item',
       entityId: itemId,
       sessionId: item.sessionId,
-      before: { decision: item.decision, comment: item.comment, remediation: remediation?.status ?? null },
-      after: { decision: input.decision, comment, remediation: remediationChange }
+      before: { decision: item.decision, comment: item.comment, assigneeId: item.assigneeId, remediation: remediation?.status ?? null },
+      after: { decision: input.decision, comment, assigneeId: input.decision === 'reassign' ? null : item.assigneeId, remediation: remediationChange }
     }, event)
 
     return { decision: input.decision, comment, remediation: remediationChange }
   })
 }
 
-/** Assigne en une fois un valideur à plusieurs lignes en attente d'une session non clôturée. */
+/**
+ * Assigne en une fois un valideur à plusieurs lignes en attente (ou à réattribuer) d'une session non clôturée.
+ * Une ligne à réattribuer repart sans réponse : le signalement reste dans le journal d'audit.
+ */
 export async function assignItems(db: Database, actor: Actor, sessionId: string, input: { itemIds: string[], assigneeId: string }, event?: RequestEvent) {
   return db.transaction(async (tx) => {
     await requireSessionNotClosed(tx, sessionId)
@@ -90,13 +107,19 @@ export async function assignItems(db: Database, actor: Actor, sessionId: string,
     if (!assignee) throw createError({ status: 400, message: 'Valideur inconnu ou désactivé' })
 
     // Lignes éligibles verrouillées, avec leur valideur précédent pour l'audit (réassignation possible).
-    const eligible = await tx.select({ id: checkItems.id, previousAssigneeId: checkItems.assigneeId }).from(checkItems)
-      .where(and(eq(checkItems.sessionId, sessionId), inArray(checkItems.id, input.itemIds), isPending))
+    const eligible = await tx.select({
+      id: checkItems.id,
+      previousAssigneeId: checkItems.assigneeId,
+      decision: checkItems.decision,
+      comment: checkItems.comment,
+      respondedById: checkItems.respondedById
+    }).from(checkItems)
+      .where(and(eq(checkItems.sessionId, sessionId), inArray(checkItems.id, input.itemIds), isAssignable))
       .for('update')
 
     if (eligible.length) {
       await tx.update(checkItems)
-        .set({ assigneeId: assignee.id, assignedById: actor.id, assignedAt: new Date() })
+        .set({ assigneeId: assignee.id, assignedById: actor.id, assignedAt: new Date(), decision: null, comment: null, respondedById: null, respondedAt: null })
         .where(inArray(checkItems.id, eligible.map(e => e.id)))
 
       await recordAudit(tx, {
@@ -104,7 +127,10 @@ export async function assignItems(db: Database, actor: Actor, sessionId: string,
         action: 'check.assign',
         entityType: 'check_item',
         sessionId,
-        before: { assignees: Object.fromEntries(eligible.map(e => [e.id, e.previousAssigneeId])) },
+        before: {
+          assignees: Object.fromEntries(eligible.map(e => [e.id, e.previousAssigneeId])),
+          reassignRequests: Object.fromEntries(eligible.filter(e => e.decision === 'reassign').map(e => [e.id, { by: e.respondedById, comment: e.comment }]))
+        },
         after: { assigneeId: assignee.id, itemIds: eligible.map(e => e.id) }
       }, event)
     }
@@ -119,7 +145,7 @@ export async function closeItemsWithoutValidation(db: Database, actor: Actor, se
     await requireSessionNotClosed(tx, sessionId)
     const updated = await tx.update(checkItems)
       .set({ closedById: actor.id, closedAt: new Date() })
-      .where(and(eq(checkItems.sessionId, sessionId), inArray(checkItems.id, itemIds), isPending))
+      .where(and(eq(checkItems.sessionId, sessionId), inArray(checkItems.id, itemIds), isAssignable))
       .returning({ id: checkItems.id, assigneeId: checkItems.assigneeId })
 
     if (updated.length) {
@@ -143,6 +169,12 @@ const TRANSITIONS = { open: 'draft', closed: 'open' } as const
 export async function setSessionStatus(db: Database, actor: Actor, sessionId: string, status: 'open' | 'closed', event?: RequestEvent) {
   return db.transaction(async (tx) => {
     const now = new Date()
+    if (status === 'open') {
+      // Pas d'ouverture pendant une collecte en cours : la liste des lignes doit être complète et figée.
+      const [running] = await tx.select({ id: collectionRuns.id }).from(collectionRuns)
+        .where(and(eq(collectionRuns.sessionId, sessionId), eq(collectionRuns.status, 'running'), gt(collectionRuns.heartbeatAt, new Date(Date.now() - 10 * 60 * 1000))))
+      if (running) throw createError({ status: 409, message: 'Une collecte est en cours : attendez sa fin pour ouvrir la session' })
+    }
     const [session] = await tx.update(controlSessions)
       .set(status === 'open' ? { status, openedAt: now } : { status, closedAt: now })
       .where(and(eq(controlSessions.id, sessionId), eq(controlSessions.status, TRANSITIONS[status])))

@@ -30,6 +30,8 @@ test('l\'admin assigne plusieurs lignes, en clôture une sans validation et ouvr
   await page.goto(sessionUrl)
   await expect(page.getByRole('heading', { name: 'Revue E2E accès externes' })).toBeVisible()
 
+  // Attendre l'hydratation : un clic avant est perdu.
+  await page.waitForLoadState('networkidle')
   for (const n of [1, 2, 3]) await rowCheckbox(page, n).click()
   await expect(page.getByText('3 ligne(s) sélectionnée(s)')).toBeVisible()
 
@@ -50,36 +52,76 @@ test('l\'admin assigne plusieurs lignes, en clôture une sans validation et ouvr
   await expect(page.getByText('Clôturée sans validation').first()).toBeVisible()
 })
 
-test('le valideur répond : commentaire obligatoire pour Non, facultatif pour Oui', async ({ page, baseURL }) => {
+test('l\'admin ne peut pas envoyer les emails sans messagerie configurée', async ({ page, baseURL }) => {
+  await as(page, baseURL, 'admin')
+  await page.goto(sessionUrl)
+  await expect(page.getByRole('heading', { name: 'Valideurs et emails' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Valérie Valideuse valerie@fimavi.test' })).toBeVisible()
+  await page.getByRole('button', { name: /Envoyer l'email \(1\)/ }).click()
+  await expect(page.getByText('Messagerie non configurée').first()).toBeVisible()
+})
+
+test('le valideur répond : commentaire toujours obligatoire, trois choix possibles', async ({ page, baseURL }) => {
   await as(page, baseURL, 'validator')
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'À faire (3)' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Répondre' }).first().click()
   const dialog = page.getByRole('dialog')
-  await dialog.getByText('Non, retirer l\'accès').click()
+  await expect(dialog.getByText('Documents / Projet 1', { exact: true })).toBeVisible()
+  await dialog.getByText('Arrêter le partage').click()
   await expect(dialog.getByRole('button', { name: 'Enregistrer' })).toBeDisabled()
   await dialog.getByRole('textbox').fill('Prestataire parti en septembre')
   await dialog.getByRole('button', { name: 'Enregistrer' }).click()
   await expect(page.getByRole('heading', { name: 'À faire (2)' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Répondre' }).first().click()
-  await dialog.getByText('Oui, conserver l\'accès').click()
+  await dialog.getByText('Valider le partage').click()
+  await expect(dialog.getByRole('button', { name: 'Enregistrer' })).toBeDisabled()
+  await dialog.getByRole('textbox').fill('Partenaire du projet jusqu\'en 2027')
   await dialog.getByRole('button', { name: 'Enregistrer' }).click()
   await expect(page.getByRole('heading', { name: 'Déjà répondues (2)' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Répondre' }).first().click()
+  await dialog.getByText('Mauvaise attribution').click()
+  await dialog.getByRole('textbox').fill('Voir Marc Manager')
+  await dialog.getByRole('button', { name: 'Enregistrer' }).click()
+  await expect(page.getByText('Ligne renvoyée à l\'IT').first()).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'À faire (0)' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Déjà répondues (2)' })).toBeVisible()
+})
+
+test('l\'admin voit la ligne à réattribuer avec le commentaire et la confie au bon valideur', async ({ page, baseURL }) => {
+  await as(page, baseURL, 'admin')
+  await page.goto(sessionUrl)
+  await expect(page.getByText('Valérie Valideuse : « Voir Marc Manager »')).toBeVisible()
+  await page.waitForLoadState('networkidle')
+  await rowCheckbox(page, 3).click()
+  await page.getByRole('button', { name: /Rechercher un valideur/ }).click()
+  await page.keyboard.type('Marc')
+  await page.getByRole('option', { name: 'Marc Manager' }).click()
+  await page.getByRole('button', { name: 'Assigner' }).click()
+  await expect(page.getByText('1 ligne(s) assignée(s)').first()).toBeVisible()
+
+  await as(page, baseURL, 'otherValidator')
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'À faire (1)' })).toBeVisible()
 })
 
 test('un valideur ne peut répondre ni à une ligne qui ne lui est pas assignée ni via une autre origine', async ({ page, baseURL }) => {
   await as(page, baseURL, 'otherValidator')
-  const asOther = await page.request.put(`/api/me/checks/${IDS.items[2]}/response`, { headers: { origin: baseURL! }, data: { decision: 'keep' } })
+  const asOther = await page.request.put(`/api/me/checks/${IDS.items[1]}/response`, { headers: { origin: baseURL! }, data: { decision: 'keep', comment: 'x' } })
   expect(asOther.status()).toBe(404)
 
   await as(page, baseURL, 'validator')
-  const closedLine = await page.request.put(`/api/me/checks/${IDS.items[3]}/response`, { headers: { origin: baseURL! }, data: { decision: 'keep' } })
+  const closedLine = await page.request.put(`/api/me/checks/${IDS.items[3]}/response`, { headers: { origin: baseURL! }, data: { decision: 'keep', comment: 'x' } })
   expect(closedLine.status()).toBe(404)
-  const crossOrigin = await page.request.put(`/api/me/checks/${IDS.items[2]}/response`, { headers: { origin: 'https://evil.example.com' }, data: { decision: 'keep' } })
+  const crossOrigin = await page.request.put(`/api/me/checks/${IDS.items[1]}/response`, { headers: { origin: 'https://evil.example.com' }, data: { decision: 'keep', comment: 'x' } })
   expect(crossOrigin.status()).toBe(403)
-  const noComment = await page.request.put(`/api/me/checks/${IDS.items[2]}/response`, { headers: { origin: baseURL! }, data: { decision: 'remove' } })
+  const noComment = await page.request.put(`/api/me/checks/${IDS.items[1]}/response`, { headers: { origin: baseURL! }, data: { decision: 'keep' } })
+  expect(noComment.status()).toBe(400)
+  const reassignedAway = await page.request.put(`/api/me/checks/${IDS.items[2]}/response`, { headers: { origin: baseURL! }, data: { decision: 'keep', comment: 'x' } })
+  expect(reassignedAway.status()).toBe(404)
   expect(noComment.status()).toBe(400)
 })
 
@@ -100,7 +142,7 @@ test('après clôture de la session, le valideur ne peut plus modifier ses répo
   await as(page, baseURL, 'admin')
   await page.goto(sessionUrl)
   await page.getByRole('button', { name: 'Clôturer la session' }).click()
-  await expect(page.getByText('1 ligne(s) resteront sans réponse.')).toBeVisible()
+  await expect(page.getByText('1 ligne(s) resteront sans réponse.')).toBeVisible() // ligne confiée à Marc
   await page.getByRole('dialog').getByRole('button', { name: 'Confirmer' }).click()
   await expect(page.getByText('Session clôturée').first()).toBeVisible()
 
@@ -108,6 +150,6 @@ test('après clôture de la session, le valideur ne peut plus modifier ses répo
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Déjà répondues (2)' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Modifier' })).toHaveCount(0)
-  const late = await page.request.put(`/api/me/checks/${IDS.items[0]}/response`, { headers: { origin: baseURL! }, data: { decision: 'keep' } })
+  const late = await page.request.put(`/api/me/checks/${IDS.items[0]}/response`, { headers: { origin: baseURL! }, data: { decision: 'keep', comment: 'x' } })
   expect(late.status()).toBe(409)
 })

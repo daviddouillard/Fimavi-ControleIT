@@ -30,8 +30,8 @@ export default defineNuxtConfig({
     databaseUrl: '',
     // NUXT_ADMIN_ROLE : valeur de l'app role Entra donnant le droit administrateur (nomenclature interne).
     adminRole: '',
-    // NUXT_UPLOAD_MAX_BYTES
-    uploadMaxBytes: 5 * 1024 * 1024,
+    // NUXT_MAIL_SENDER : boîte d'envoi des emails aux valideurs (ex. helpdesk@…)
+    mailSender: '',
     public: {}
   },
 

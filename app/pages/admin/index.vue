@@ -7,13 +7,30 @@ const { data: sessions, refresh, status } = await useFetch('/api/admin/sessions'
 const active = computed(() => sessions.value.filter(s => s.status !== 'closed'))
 const totals = computed(() => active.value.reduce((acc, s) => ({
   pending: acc.pending + s.waiting,
-  unassigned: acc.unassigned + s.unassigned
+  unassigned: acc.unassigned + s.unassigned + s.toReassign
 }), { pending: 0, unassigned: 0 }))
 
 const templateItems = Object.entries(CONTROL_TEMPLATES).map(([value, label]) => ({ value, label }))
 const createOpen = ref(false)
-const form = reactive<CreateSessionInput>({ name: '', template: 'sharepoint-external' })
+const form = reactive<CreateSessionInput>({ name: '', template: 'sharepoint-external', siteIds: [] })
 const creating = ref(false)
+
+// Sites SharePoint actifs (paramètres) : tous pré-cochés à l'ouverture de la fenêtre.
+const { data: settings, refresh: refreshSettings } = await useFetch('/api/admin/settings', { immediate: false })
+const activeSites = computed(() => {
+  const enabledTenants = new Map((settings.value?.connections ?? []).filter(c => c.enabled).map(c => [c.id, c.name]))
+  return (settings.value?.sites ?? []).filter(site => site.enabled && enabledTenants.has(site.connectionId))
+    .map(site => ({ ...site, tenantName: enabledTenants.get(site.connectionId)! }))
+})
+async function openCreate() {
+  await refreshSettings()
+  form.siteIds = activeSites.value.map(site => site.id)
+  createOpen.value = true
+}
+function toggleSite(siteId: string, checked: boolean) {
+  const current = form.siteIds ?? []
+  form.siteIds = checked ? [...new Set([...current, siteId])] : current.filter(s => s !== siteId)
+}
 
 async function createSession() {
   creating.value = true
@@ -22,8 +39,9 @@ async function createSession() {
     createOpen.value = false
     form.name = ''
     await navigateTo(`/admin/sessions/${session.id}`)
-  } catch {
-    toast.add({ title: 'Création impossible', description: 'Vérifiez le nom (3 caractères minimum).', color: 'error' })
+  } catch (e) {
+    const message = (e as { data?: { message?: string } }).data?.message
+    toast.add({ title: 'Création impossible', description: message ?? 'Vérifiez le nom (3 caractères minimum) et les sites.', color: 'error' })
   } finally {
     creating.value = false
   }
@@ -51,7 +69,9 @@ async function syncDirectory() {
   syncing.value = true
   try {
     const result = await $fetch('/api/admin/directory/sync', { method: 'POST' })
-    toast.add({ title: 'Annuaire synchronisé', description: `${result.count} collaborateurs`, color: 'success' })
+    const failed = result.tenants.filter(t => t.error)
+    toast.add({ title: 'Annuaire synchronisé', description: `${result.count} collaborateurs`, color: failed.length ? 'warning' : 'success' })
+    for (const t of failed) toast.add({ title: `Tenant « ${t.name} » non synchronisé`, description: t.error, color: 'error' })
   } catch {
     toast.add({ title: 'Échec de la synchronisation Entra ID', color: 'error' })
   } finally {
@@ -68,7 +88,7 @@ async function syncDirectory() {
         <UButton icon="i-lucide-refresh-cw" color="neutral" variant="outline" :loading="syncing" @click="syncDirectory">
           Synchroniser l'annuaire
         </UButton>
-        <UButton icon="i-lucide-plus" @click="createOpen = true">Nouvelle session</UButton>
+        <UButton icon="i-lucide-plus" @click="openCreate">Nouvelle session</UButton>
       </div>
     </div>
 
@@ -78,7 +98,7 @@ async function syncDirectory() {
         <p class="text-3xl font-semibold">{{ totals.pending }}</p>
       </UCard>
       <UCard>
-        <p class="text-sm text-muted">Lignes sans valideur</p>
+        <p class="text-sm text-muted">Lignes à (ré)attribuer</p>
         <p class="text-3xl font-semibold">{{ totals.unassigned }}</p>
       </UCard>
       <UCard>
@@ -124,7 +144,7 @@ async function syncDirectory() {
             <div class="w-48">
               <UProgress :model-value="s.answered + s.closedWithoutValidation" :max="Math.max(s.totalItems, 1)" size="sm" />
               <p class="mt-1 text-xs text-muted">
-                {{ s.answered + s.closedWithoutValidation }} / {{ s.totalItems }} traitées · {{ s.unassigned }} sans valideur · {{ s.remediationsTodo }} à retirer
+                {{ s.answered + s.closedWithoutValidation }} / {{ s.totalItems }} traitées · {{ s.unassigned }} sans valideur · {{ s.toReassign }} à réattribuer · {{ s.remediationsTodo }} à retirer
               </p>
             </div>
           </NuxtLink>
@@ -141,10 +161,34 @@ async function syncDirectory() {
           <UFormField label="Modèle de contrôle" required>
             <USelect v-model="form.template" :items="templateItems" class="w-full" />
           </UFormField>
+          <fieldset v-if="form.template === 'sharepoint-external'" class="space-y-1">
+            <legend class="mb-1 text-sm font-medium">Sites SharePoint à analyser</legend>
+            <p v-if="!activeSites.length" class="text-sm text-muted">
+              Aucun site actif. Déclarez vos sites dans les <ULink to="/admin/settings">paramètres</ULink>.
+            </p>
+            <div v-else class="max-h-64 space-y-1 overflow-y-auto">
+              <UCheckbox
+                v-for="site in activeSites"
+                :key="site.id"
+                :model-value="form.siteIds?.includes(site.id)"
+                :label="site.displayName ?? site.url"
+                :description="`${site.tenantName} · ${site.url}`"
+                @update:model-value="(v: boolean | 'indeterminate') => toggleSite(site.id, v === true)"
+              />
+            </div>
+          </fieldset>
+          <p class="text-sm text-muted">La recherche des partages externes démarre dès la création.</p>
         </form>
       </template>
       <template #footer>
-        <UButton type="submit" form="create-session" :loading="creating">Créer</UButton>
+        <UButton
+          type="submit"
+          form="create-session"
+          :loading="creating"
+          :disabled="form.template === 'sharepoint-external' && !form.siteIds?.length"
+        >
+          Créer et rechercher les partages
+        </UButton>
       </template>
     </UModal>
   </div>

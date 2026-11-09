@@ -29,6 +29,14 @@ try {
     GRANT SELECT, INSERT ON audit_log TO controleit_app;
     REVOKE UPDATE, DELETE, TRUNCATE ON audit_log FROM controleit_app;
     GRANT USAGE ON SEQUENCE audit_log_id_seq TO controleit_app;
+    GRANT SELECT, INSERT, UPDATE ON collection_runs TO controleit_app;
+    REVOKE DELETE, TRUNCATE ON collection_runs FROM controleit_app;
+    -- Emails envoyés : historique en ajout seul.
+    GRANT SELECT, INSERT ON notifications TO controleit_app;
+    REVOKE UPDATE, DELETE, TRUNCATE ON notifications FROM controleit_app;
+    -- Paramètres : la liste des domaines est remplacée en bloc, un site ou un tenant sans site peut être retiré.
+    GRANT SELECT, INSERT, UPDATE, DELETE ON tenant_connections, sharepoint_sites, internal_domains TO controleit_app;
+    REVOKE TRUNCATE ON tenant_connections, sharepoint_sites, internal_domains FROM controleit_app;
   `)
   console.log(`Rôle controleit_app : ${verb === 'CREATE' ? 'créé' : 'mis à jour'}, droits appliqués`)
 } finally {

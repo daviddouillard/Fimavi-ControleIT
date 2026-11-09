@@ -85,5 +85,6 @@ jobs:
             --service-account "controleit-run@${PROJECT}.iam.gserviceaccount.com" \
             --add-cloudsql-instances "$INSTANCE" \
             --memory 512Mi --cpu 1 --min-instances 0 --max-instances 3 --no-invoker-iam-check \
+            --no-cpu-throttling \
             --set-secrets "NUXT_APP_SECRET=controleit-app-secret:latest,NUXT_DATABASE_URL=controleit-database-url:latest,NUXT_OAUTH_MICROSOFT_CLIENT_SECRET=controleit-entra-client-secret:latest" \
-            --set-env-vars "NUXT_OAUTH_MICROSOFT_TENANT=${{ vars.ENTRA_TENANT_ID }},NUXT_OAUTH_MICROSOFT_CLIENT_ID=${{ vars.ENTRA_CLIENT_ID }},NUXT_ADMIN_ROLE=${{ vars.ENTRA_ADMIN_ROLE }},NUXT_OAUTH_MICROSOFT_REDIRECT_URL=https://controleit-${{ vars.GCP_PROJECT_NUMBER }}.${{ vars.GCP_REGION }}.run.app/auth/microsoft"
+            --set-env-vars "NUXT_OAUTH_MICROSOFT_TENANT=${{ vars.ENTRA_TENANT_ID }},NUXT_OAUTH_MICROSOFT_CLIENT_ID=${{ vars.ENTRA_CLIENT_ID }},NUXT_ADMIN_ROLE=${{ vars.ENTRA_ADMIN_ROLE }},NUXT_MAIL_SENDER=${{ vars.MAIL_SENDER }},NUXT_OAUTH_MICROSOFT_REDIRECT_URL=https://controleit-${{ vars.GCP_PROJECT_NUMBER }}.${{ vars.GCP_REGION }}.run.app/auth/microsoft"

@@ -2,16 +2,21 @@ import { and, eq } from 'drizzle-orm'
 import { createError, type RequestEvent } from 'nuxt/server'
 import { users } from '../db/schema'
 import { useDb } from './db'
+import { allowedTenants, homeTenant } from './tenants'
 
 /**
  * Exige un utilisateur connecté (401 sinon).
- * Le compte est revérifié en base à chaque requête : un compte désactivé à la synchro Entra perd l'accès immédiatement.
+ * Le compte est revérifié en base à chaque requête : un compte désactivé à la synchro Entra, ou dont le tenant
+ * a été désactivé dans les paramètres, perd l'accès immédiatement.
  */
 export async function requireUser(event: RequestEvent) {
   const { user } = await requireUserSession(event, { status: 401, message: 'Authentification requise' })
-  const [active] = await useDb().select({ id: users.id }).from(users)
+  const db = useDb()
+  const [active] = await db.select({ tenantId: users.tenantId }).from(users)
     .where(and(eq(users.id, user.id), eq(users.accountEnabled, true)))
-  if (!active) {
+  const home = homeTenant()
+  const tenantAllowed = active && (active.tenantId === '' || active.tenantId === home || (await allowedTenants(db, home)).has(active.tenantId))
+  if (!active || !tenantAllowed) {
     await clearUserSession(event)
     throw createError({ status: 401, message: 'Compte désactivé' })
   }

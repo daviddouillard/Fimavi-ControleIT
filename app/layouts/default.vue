@@ -8,7 +8,8 @@ const links = computed<NavigationMenuItem[]>(() => [
   ...(user.value?.isAdmin
     ? [
         { label: 'Administration', icon: 'i-lucide-shield', to: '/admin', exact: true },
-        { label: 'Historique', icon: 'i-lucide-history', to: '/admin/history' }
+        { label: 'Historique', icon: 'i-lucide-history', to: '/admin/history' },
+        { label: 'Paramètres', icon: 'i-lucide-settings', to: '/admin/settings' }
       ]
     : [])
 ])

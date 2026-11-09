@@ -15,7 +15,8 @@ export function listSessionSummaries(db: Pick<Database, 'select'>) {
     totalItems: sql<number>`count(distinct ${checkItems.id})::int`,
     unassigned: sql<number>`(count(distinct ${checkItems.id}) filter (where ${checkItems.assigneeId} is null and ${checkItems.decision} is null and ${checkItems.closedAt} is null))::int`,
     waiting: sql<number>`(count(distinct ${checkItems.id}) filter (where ${checkItems.assigneeId} is not null and ${checkItems.decision} is null and ${checkItems.closedAt} is null))::int`,
-    answered: sql<number>`(count(distinct ${checkItems.id}) filter (where ${checkItems.decision} is not null))::int`,
+    answered: sql<number>`(count(distinct ${checkItems.id}) filter (where ${checkItems.decision} in ('keep', 'remove')))::int`,
+    toReassign: sql<number>`(count(distinct ${checkItems.id}) filter (where ${checkItems.decision} = 'reassign' and ${checkItems.closedAt} is null))::int`,
     closedWithoutValidation: sql<number>`(count(distinct ${checkItems.id}) filter (where ${checkItems.closedAt} is not null))::int`,
     remediationsTodo: sql<number>`(count(distinct ${remediations.id}) filter (where ${remediations.status} = 'todo'))::int`
   })
