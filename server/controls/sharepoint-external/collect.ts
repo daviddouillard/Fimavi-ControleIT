@@ -14,6 +14,8 @@ export interface SiteTarget {
   url: string
   tenantId: string
   tenantName: string
+  /** Identifiants Entra (minuscules) des membres du tenant : jamais considérés comme externes. */
+  memberIds?: ReadonlySet<string>
 }
 
 export interface CollectedLine {
@@ -136,7 +138,7 @@ export async function collectSiteShares(
     await pool(candidates, 4, async (item) => {
       const grants: ExternalGrant[] = []
       for await (const page of graph.list(`drives/${encodeURIComponent(drive.id)}/items/${encodeURIComponent(item.id)}/permissions`)) {
-        for (const permission of page) grants.push(...externalGrants(permission, internalDomains))
+        for (const permission of page) grants.push(...externalGrants(permission, internalDomains, target.memberIds))
       }
       grantsByItem.set(item.id, grants)
       if (++progress.permissionsChecked % 25 === 0) await onProgress(progress)

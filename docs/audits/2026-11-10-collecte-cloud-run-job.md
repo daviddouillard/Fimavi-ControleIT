@@ -55,3 +55,19 @@ Corrections :
 - L'avancement de l'analyse des permissions (x/y) et le nombre de lignes déjà présentes s'affichent sur la session.
 
 TNR : typecheck OK, 73/73 (2 tests ajoutés : signe de vie pendant une longue étape, arrêt d'une collecte interrompue), 23/23.
+
+## Correctif : comptes membres du tenant remontés comme externes
+
+Les comptes d'administration du tenant (adresse hors de la liste des domaines internes, par exemple en onmicrosoft.com) remontaient comme des partages externes. La règle ne regardait que le domaine de l'adresse.
+
+Un compte membre du tenant n'est plus jamais considéré comme externe, quel que soit son domaine. Il est reconnu de deux façons :
+- son nom de connexion SharePoint est de la forme `i:0#.f|membership|…`, sans `#ext#` ;
+- ou son identifiant Entra figure dans l'annuaire synchronisé du tenant du site, qui ne contient que les comptes « Member ».
+
+Restent externes :
+- les invités (`#ext#`, `urn:spo:guest`) hors des domaines du groupe ;
+- les liens « Tout le monde ».
+
+Sécurité : la règle ne fait que réduire les lignes remontées, à partir de données fournies par Graph et l'annuaire. Pas de nouvelle entrée utilisateur.
+
+TNR : typecheck OK, 76/76 (3 tests ajoutés), 23/23.

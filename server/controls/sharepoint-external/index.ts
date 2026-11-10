@@ -1,6 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
-import { sharepointSites, tenantConnections } from '../../db/schema'
+import { sharepointSites, tenantConnections, users } from '../../db/schema'
 import type { Database } from '../../utils/db'
 import type { GraphClient } from '../../utils/graph'
 import { CollectionStopped, type CollectionContext, type ControlModule } from '../types'
@@ -25,6 +25,12 @@ export async function sessionSites(db: Pick<Database, 'select'>, siteIds: string
     .where(and(inArray(sharepointSites.id, siteIds), eq(sharepointSites.enabled, true), eq(tenantConnections.enabled, true)))
 }
 
+/** Membres du tenant connus de l'annuaire synchronisé (la synchro ne retient que les comptes « Member »). */
+export async function tenantMemberIds(db: Pick<Database, 'select'>, tenantId: string) {
+  const rows = await db.select({ entraId: users.entraId }).from(users).where(eq(users.tenantId, tenantId))
+  return new Set(rows.map(r => r.entraId.toLowerCase()))
+}
+
 export function sharepointModule(deps: SharepointDeps): ControlModule {
   return {
     async collect(ctx: CollectionContext) {
@@ -33,9 +39,15 @@ export function sharepointModule(deps: SharepointDeps): ControlModule {
       if (!sites.length) throw new Error('Aucun site actif à analyser')
       if (!ctx.internalDomains.size) throw new Error('Aucun domaine interne paramétré')
 
+      const membersByTenant = new Map<string, Set<string>>()
       for (const [index, site] of sites.entries()) {
         try {
-          const lines = await collectSiteShares(deps.graphFor(site.tenantId), { url: site.url, tenantId: site.tenantId, tenantName: site.tenantName }, ctx.internalDomains,
+          let memberIds = membersByTenant.get(site.tenantId)
+          if (!memberIds) {
+            memberIds = await tenantMemberIds(ctx.db, site.tenantId)
+            membersByTenant.set(site.tenantId, memberIds)
+          }
+          const lines = await collectSiteShares(deps.graphFor(site.tenantId), { url: site.url, tenantId: site.tenantId, tenantName: site.tenantName, memberIds }, ctx.internalDomains,
             p => ctx.progress({ site: site.url, sitesDone: index, sitesTotal: sites.length, ...p }))
           await ctx.addLines(lines)
         } catch (error) {

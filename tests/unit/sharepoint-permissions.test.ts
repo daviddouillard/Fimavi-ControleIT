@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { emailFromLogin, externalGrants, isInternalDomain } from '../../server/controls/sharepoint-external/permissions'
+import { emailFromLogin, externalGrants, isInternalDomain, isTenantMemberLogin } from '../../server/controls/sharepoint-external/permissions'
 
 const internal = new Set(['fimavi.com', 'filiale.fr'])
 
@@ -63,6 +63,29 @@ describe('externalGrants', () => {
   it('ignore les groupes et les comptes internes', () => {
     expect(externalGrants({ id: 'p5', roles: ['write'], grantedToV2: { siteGroup: { displayName: 'Membres' } } }, internal)).toEqual([])
     expect(externalGrants({ id: 'p6', roles: ['write'], grantedToV2: { user: { email: 'jean@fimavi.com' } } }, internal)).toEqual([])
+  })
+
+  it('ignore un compte membre du tenant, même hors des domaines internes (compte admin onmicrosoft.com)', () => {
+    const admin = { siteUser: { displayName: 'Admin Bruno', email: 'adm-bruno@fimavi.onmicrosoft.com', loginName: 'i:0#.f|membership|adm-bruno@fimavi.onmicrosoft.com' } }
+    expect(externalGrants({ id: 'p8', roles: ['owner'], grantedToV2: admin }, internal)).toEqual([])
+    expect(externalGrants({ id: 'p9', roles: ['read'], link: { scope: 'users' }, grantedToIdentitiesV2: [admin] }, internal)).toEqual([])
+    expect(isTenantMemberLogin('i:0#.f|membership|adm-bruno@fimavi.onmicrosoft.com')).toBe(true)
+    expect(isTenantMemberLogin('i:0#.f|membership|ext_partner.io#EXT#@fimavi.onmicrosoft.com')).toBe(false)
+    expect(isTenantMemberLogin('urn:spo:guest#ext@partner.io')).toBe(false)
+  })
+
+  it('ignore un membre de l\'annuaire synchronisé connu par son seul identifiant Entra', () => {
+    const members = new Set(['8e1c0000-0000-4000-8000-00000000000a'])
+    const raw = { id: 'p10', roles: ['read'], link: { scope: 'users' }, grantedToIdentitiesV2: [
+      { user: { id: '8E1C0000-0000-4000-8000-00000000000A', displayName: 'Thomas', email: 'thomas@fimavi.onmicrosoft.com' } },
+      { user: { id: 'ffff0000-0000-4000-8000-000000000001', displayName: 'Partenaire', email: 'p@partner.io' } }
+    ] }
+    expect(externalGrants(raw, internal, members).map(g => g.email)).toEqual(['p@partner.io'])
+  })
+
+  it('remonte toujours un invité dont le domaine est externe', () => {
+    const grants = externalGrants({ id: 'p11', roles: ['write'], grantedToV2: { siteUser: { displayName: 'Ext', email: 'ext@partner.io', loginName: 'i:0#.f|membership|ext_partner.io#ext#@fimavi.onmicrosoft.com' } } }, internal)
+    expect(grants[0]).toMatchObject({ email: 'ext@partner.io', access: 'direct', role: 'write' })
   })
 
   it('traite un invité sans adresse lisible comme externe', () => {

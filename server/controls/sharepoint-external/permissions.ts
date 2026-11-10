@@ -2,8 +2,9 @@ import { z } from 'zod'
 
 /**
  * Lecture des permissions Graph d'un élément SharePoint (driveItem) et extraction des partages externes.
- * Externe = adresse dont le domaine n'est pas dans la liste des domaines internes du groupe,
- * ou lien « Tout le monde » (anonyme). Les groupes SharePoint et les liens « organisation » sont ignorés.
+ * Externe = lien « Tout le monde » (anonyme), ou personne qui n'est pas membre du tenant (invité #ext#,
+ * invité SharePoint) et dont l'adresse n'est pas dans un domaine interne du groupe. Un compte membre du tenant
+ * (nom de connexion « membership » ou identifiant présent dans l'annuaire synchronisé) n'est jamais externe. Les groupes SharePoint et les liens « organisation » sont ignorés.
  */
 
 const identitySchema = z.object({
@@ -97,13 +98,25 @@ export function isInternalDomain(domain: string, internal: ReadonlySet<string>):
   return false
 }
 
+/** Nom de connexion d'un compte membre du tenant (pas un invité Entra #ext#, pas un invité SharePoint urn:spo:guest). */
+export function isTenantMemberLogin(login: string | null | undefined): boolean {
+  const value = login?.toLowerCase() ?? ''
+  return value.startsWith('i:0#.f|membership|') && !value.includes('#ext#')
+}
+
 type IdentitySet = z.infer<typeof identitySetSchema>
 
 /** Personne désignée par une identité (les groupes sont ignorés) et son caractère externe. */
-function externalPerson(identity: IdentitySet | null, invitationEmail: string | null | undefined, internal: ReadonlySet<string>) {
+function externalPerson(identity: IdentitySet | null, invitationEmail: string | null | undefined, internal: ReadonlySet<string>, members: ReadonlySet<string>) {
   const person = identity?.user ?? identity?.siteUser
   if (!person && !invitationEmail) return null
+  // Membre du tenant présent dans l'annuaire synchronisé (identifiant Entra) : jamais externe.
+  const userId = identity?.user?.id?.toLowerCase()
+  if (userId && members.has(userId)) return null
   const login = identity?.siteUser?.loginName ?? identity?.user?.loginName
+  // Compte membre du tenant (i:0#.f|membership|…, sans #ext#) : jamais externe, quel que soit son domaine
+  // (comptes d'administration en …onmicrosoft.com, domaine absent de la liste…).
+  if (isTenantMemberLogin(login)) return null
   const rawEmail = person?.email ?? identity?.siteUser?.email ?? null
   const email = (rawEmail && EMAIL.test(rawEmail) ? rawEmail.toLowerCase() : null) ?? emailFromLogin(login) ?? (invitationEmail && EMAIL.test(invitationEmail) ? invitationEmail.toLowerCase() : null)
 
@@ -123,7 +136,11 @@ function expiry(value: string | null | undefined): string | null {
   return value && !value.startsWith('0001-') ? value : null
 }
 
-export function externalGrants(raw: unknown, internal: ReadonlySet<string>): ExternalGrant[] {
+/**
+ * @param internal domaines internes du groupe
+ * @param members identifiants Entra (minuscules) des membres du tenant du site, issus de l'annuaire synchronisé
+ */
+export function externalGrants(raw: unknown, internal: ReadonlySet<string>, members: ReadonlySet<string> = new Set()): ExternalGrant[] {
   const parsed = permissionSchema.safeParse(raw)
   if (!parsed.success) return []
   const p = parsed.data
@@ -139,12 +156,12 @@ export function externalGrants(raw: unknown, internal: ReadonlySet<string>): Ext
     const identities = [...(p.grantedToIdentitiesV2 ?? []), ...(p.grantedToV2 ? [p.grantedToV2] : [])]
     const grants = new Map<string, ExternalGrant>()
     for (const identity of identities) {
-      const person = externalPerson(identity, null, internal)
+      const person = externalPerson(identity, null, internal, members)
       if (person) grants.set(person.beneficiaryKey, { ...person, access: 'people_link', role, expiresAt })
     }
     return [...grants.values()]
   }
 
-  const person = externalPerson(p.grantedToV2, p.invitation?.email, internal)
+  const person = externalPerson(p.grantedToV2, p.invitation?.email, internal, members)
   return person ? [{ ...person, access: 'direct', role, expiresAt }] : []
 }
