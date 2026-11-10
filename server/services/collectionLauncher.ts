@@ -18,7 +18,7 @@ import { failRun, runCollection } from './collection'
 /** Nom complet d'un Job Cloud Run : projects/<projet>/locations/<région>/jobs/<job>. */
 export const JOB_NAME = /^projects\/[a-z][a-z0-9-]{4,28}[a-z0-9]\/locations\/[a-z]+-[a-z]+\d+\/jobs\/[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/
 
-const METADATA_TOKEN_URL = 'http://metadata.google.internal/computeMetadata/v1/instance/service-account/token'
+export const METADATA_TOKEN_URL = 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token'
 const RUN_API = 'https://run.googleapis.com/v2/'
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>

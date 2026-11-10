@@ -38,3 +38,9 @@ Aucun constat ouvert.
   - échec de lancement et nom de Job invalide.
 - `npm run test:e2e` : 23/23
 - Build lancé localement en mode Job : le conteneur exécute la collecte puis s'arrête (code 1 en cas d'erreur).
+
+## Correctif post-déploiement
+
+Le premier essai en production a échoué avec « Lancement de la collecte impossible ». Les journaux indiquaient : jeton du compte de service indisponible (404). L'adresse du serveur de métadonnées était erronée (`instance/service-account/token`) ; la bonne adresse est `instance/service-accounts/default/token`. Le test vérifie désormais cette adresse.
+
+TNR après correctif : typecheck OK, 71/71, 23/23.

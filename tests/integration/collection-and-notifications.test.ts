@@ -135,6 +135,7 @@ describe('collecte', () => {
     await launchCollection(db, run.id, { job: 'projects/fimavi-controleit/locations/europe-west9/jobs/controleit-collect', fetchImpl })
 
     expect(calls).toHaveLength(2)
+    expect(calls[0]!.url).toBe('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token')
     expect(new Headers(calls[0]!.init?.headers).get('Metadata-Flavor')).toBe('Google')
     expect(calls[1]!.url).toBe('https://run.googleapis.com/v2/projects/fimavi-controleit/locations/europe-west9/jobs/controleit-collect:run')
     expect(new Headers(calls[1]!.init?.headers).get('Authorization')).toBe('Bearer sa-token')
