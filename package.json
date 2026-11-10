@@ -19,6 +19,7 @@
     "audit:deps": "npm audit --omit=dev"
   },
   "dependencies": {
+    "@iconify-json/lucide": "^1.2.153",
     "@nuxt/ui": "^4.12.0",
     "drizzle-orm": "^0.45.4",
     "jose": "^6.2.15",

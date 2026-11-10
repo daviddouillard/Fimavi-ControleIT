@@ -39,6 +39,14 @@ export default defineNuxtConfig({
     public: {}
   },
 
+  // Icônes servies par l'application elle-même (collection @iconify-json/lucide installée) :
+  // aucun appel à l'API Iconify, que la CSP (connect-src 'self') bloquerait.
+  icon: {
+    serverBundle: 'local',
+    clientBundle: { scan: true },
+    fallbackToApi: false
+  },
+
   security: {
     // On garde les logs serveur (Cloud Logging) ; ils ne doivent jamais contenir de secret ni de jeton.
     removeLoggers: false,

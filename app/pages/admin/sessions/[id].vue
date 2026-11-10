@@ -3,6 +3,15 @@ import type { TableColumn } from '@nuxt/ui'
 
 const UCheckbox = resolveComponent('UCheckbox')
 const UBadge = resolveComponent('UBadge')
+const UIcon = resolveComponent('UIcon')
+
+const RESOURCE_ICONS: Record<string, string> = { Bibliothèque: 'i-lucide-library', Dossier: 'i-lucide-folder', Fichier: 'i-lucide-file-text' }
+
+/** « Nom <adresse> » → nom et adresse séparés (affichage sur deux lignes). */
+function splitBeneficiary(value: string | undefined): { name: string, email: string | null } {
+  const match = value?.match(/^(.*?)s*<([^>]+)>$/)
+  return match ? { name: match[1]!, email: match[2]! } : { name: value ?? '—', email: null }
+}
 const toast = useToast()
 
 const route = useRoute()
@@ -75,24 +84,41 @@ const columns: TableColumn<Item>[] = [
     })
   },
   { accessorKey: 'rowNumber', header: '#' },
-  { id: 'site', header: 'Site', cell: ({ row }) => row.original.data.site ?? '—' },
+  { id: 'site', header: 'Site', cell: ({ row }) => h('span', { class: 'whitespace-nowrap font-medium' }, row.original.data.site ?? '—') },
   {
     id: 'resource',
     header: 'Ressource',
-    cell: ({ row }) => h('div', { class: 'max-w-xs' }, [
-      h('div', { class: 'break-all' }, row.original.data.resource ?? row.original.label),
-      row.original.data.resourceType ? h('div', { class: 'text-xs text-muted' }, row.original.data.resourceType) : null
-    ])
+    cell: ({ row }) => {
+      const data = row.original.data
+      const path = data.resource ?? row.original.label
+      const parts = path.split(' / ')
+      const name = parts.pop() ?? path
+      const link = sharepointLink(data)
+      return h('div', { class: 'min-w-64 max-w-md 2xl:max-w-xl' }, [
+        h('div', { class: 'flex items-start gap-2' }, [
+          h(UIcon, { name: RESOURCE_ICONS[data.resourceType ?? ''] ?? 'i-lucide-file', class: 'mt-0.5 size-4 shrink-0 text-muted' }),
+          link
+            ? h('a', { href: link, target: '_blank', rel: 'noopener noreferrer', class: 'font-medium break-words hover:underline' }, name)
+            : h('span', { class: 'font-medium break-words' }, name)
+        ]),
+        parts.length ? h('div', { class: 'mt-0.5 pl-6 text-xs text-muted break-words', title: path }, parts.join(' / ')) : null
+      ])
+    }
   },
   {
     id: 'beneficiary',
     header: 'Bénéficiaire',
-    cell: ({ row }) => h('div', { class: 'max-w-xs' }, [
-      h('div', { class: 'break-all' }, row.original.data.beneficiary ?? '—'),
-      h('div', { class: 'text-xs text-muted' }, [row.original.data.access, row.original.data.role].filter(Boolean).join(' · '))
-    ])
+    cell: ({ row }) => {
+      const { name, email } = splitBeneficiary(row.original.data.beneficiary)
+      return h('div', { class: 'min-w-56 max-w-xs 2xl:max-w-sm' }, [
+        h('div', { class: 'font-medium break-words' }, name),
+        email ? h('div', { class: 'text-xs text-muted break-all' }, email) : null,
+        h('div', { class: 'mt-1.5 flex flex-wrap gap-1' }, [row.original.data.access, row.original.data.role]
+          .filter(Boolean).map(label => h(UBadge, { color: 'neutral', variant: 'soft', size: 'sm', label })))
+      ])
+    }
   },
-  { accessorKey: 'assigneeName', header: 'Valideur', cell: ({ row }) => row.original.assigneeName ?? '—' },
+  { accessorKey: 'assigneeName', header: 'Valideur', cell: ({ row }) => h('span', { class: 'block min-w-32' }, row.original.assigneeName ?? '—') },
   {
     id: 'state',
     header: 'État',
@@ -104,9 +130,12 @@ const columns: TableColumn<Item>[] = [
   {
     accessorKey: 'comment',
     header: 'Commentaire',
-    cell: ({ row }) => row.original.decision === 'reassign' && row.original.comment
-      ? `${row.original.respondedByName ?? 'Valideur'} : « ${row.original.comment} »`
-      : row.original.comment ?? ''
+    cell: ({ row }) => {
+      const text = row.original.decision === 'reassign' && row.original.comment
+        ? `${row.original.respondedByName ?? 'Valideur'} : « ${row.original.comment} »`
+        : row.original.comment ?? ''
+      return text ? h('p', { class: 'min-w-40 max-w-xs line-clamp-3 break-words', title: text }, text) : '—'
+    }
   },
   {
     accessorKey: 'remediationStatus',
@@ -308,6 +337,8 @@ function sendEmails() {
         :columns="columns"
         :row-selection-options="{ enableRowSelection: row => editable && isPending(row.original) }"
         :empty="run?.status === 'running' ? 'Collecte en cours…' : 'Aucun partage externe trouvé.'"
+        sticky
+        :ui="{ th: 'whitespace-nowrap', td: 'whitespace-normal align-top py-3' }"
       />
     </UCard>
 

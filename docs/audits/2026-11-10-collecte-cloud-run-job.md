@@ -94,3 +94,23 @@ Sécurité :
 - À réévaluer après validation : retirer `Sites.Read.All` si `Sites.Selected` suffit sur les sites désignés.
 
 TNR : typecheck OK, 78/78 (tests ajoutés : en-tête hierarchicalsharing, site en lecture seule, erreur de vérification), 23/23.
+
+## Ergonomie : tableau des lignes et icônes
+
+- Le texte des cellules ne passait pas à la ligne alors que leur largeur était limitée : il débordait sur les colonnes voisines.
+- Nouvelle mise en page :
+  - page élargie jusqu'à 1 920 px ;
+  - colonne Ressource : icône selon le type, nom en gras, chemin en dessous, lien SharePoint ;
+  - colonne Bénéficiaire : nom, adresse, badges d'accès et de droit ;
+  - commentaire limité à 3 lignes, avec le texte complet au survol.
+- Icônes absentes en production : le module d'icônes appelait l'API Iconify, bloquée par la CSP (`connect-src 'self'`). Les icônes sont désormais servies par l'application :
+  - collection `@iconify-json/lucide` installée ;
+  - réglages `serverBundle: 'local'`, `clientBundle.scan` et `fallbackToApi: false`.
+
+  La CSP est inchangée et aucun appel extérieur n'est fait.
+
+Sécurité :
+- Pas de `v-html`. Les liens ne pointent que vers `https://*.sharepoint.com` (`sharepointLink`), avec `rel="noopener noreferrer"`.
+- Dépendance ajoutée : `@iconify-json/lucide`, des données d'icônes uniquement. `npm audit --omit=dev` est inchangé : 13 vulnérabilités, aucune haute.
+
+TNR : typecheck OK, 78/78, 23/23. Rendu vérifié par captures en 1 440 et 1 920 px, avec des données réalistes.

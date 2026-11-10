@@ -24,7 +24,7 @@ async function logout() {
 <template>
   <div class="min-h-screen bg-default">
     <header v-if="loggedIn" class="border-b border-default">
-      <UContainer class="flex items-center justify-between gap-4 py-3">
+      <UContainer class="flex max-w-[1920px] items-center justify-between gap-4 py-3">
         <NuxtLink to="/" class="font-semibold">ControleIT</NuxtLink>
         <UNavigationMenu :items="links" class="flex-1" />
         <div class="flex items-center gap-2">
@@ -33,7 +33,7 @@ async function logout() {
         </div>
       </UContainer>
     </header>
-    <UContainer class="py-6">
+    <UContainer class="max-w-[1920px] py-6">
       <slot />
     </UContainer>
   </div>
