@@ -24,6 +24,13 @@ async function failStaleRuns(db: Pick<Database, 'update'>, sessionId: string) {
     .where(and(eq(collectionRuns.sessionId, sessionId), eq(collectionRuns.status, 'running'), lt(collectionRuns.heartbeatAt, new Date(Date.now() - STALE_AFTER_MS))))
 }
 
+/** Marque en échec une collecte encore en cours (lancement impossible…). */
+export async function failRun(db: Pick<Database, 'update'>, runId: string, error: string) {
+  await db.update(collectionRuns)
+    .set({ status: 'failed', finishedAt: new Date(), error })
+    .where(and(eq(collectionRuns.id, runId), eq(collectionRuns.status, 'running')))
+}
+
 /** Dernière collecte d'une session (affichage de l'avancement). */
 export async function latestRun(db: Database, sessionId: string) {
   await failStaleRuns(db, sessionId)

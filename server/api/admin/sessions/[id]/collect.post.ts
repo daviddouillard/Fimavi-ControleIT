@@ -1,8 +1,8 @@
-import { createError, defineEventHandler } from 'nuxt/server'
+import { createError, defineEventHandler, useRuntimeConfig } from 'nuxt/server'
 import { eq } from 'drizzle-orm'
-import { controlModule } from '../../../../controls'
 import { controlSessions } from '../../../../db/schema'
-import { runCollection, startCollection } from '../../../../services/collection'
+import { startCollection } from '../../../../services/collection'
+import { launchCollection } from '../../../../services/collectionLauncher'
 import { requireAdmin } from '../../../../utils/authz'
 import { useDb } from '../../../../utils/db'
 import { requireUuidParam } from '../../../../utils/params'
@@ -16,6 +16,7 @@ export default defineEventHandler(async (event) => {
   if (!session) throw createError({ status: 404, message: 'Session introuvable' })
 
   const run = await startCollection(db, admin, sessionId, event)
-  runCollection(db, run.id, controlModule(session.template)).catch(error => console.error('Collecte non démarrée :', error instanceof Error ? error.message : 'erreur inconnue'))
+  // Collecte exécutée côté serveur (Cloud Run Job) : la page de la session en suit l'avancement.
+  await launchCollection(db, run.id, { job: useRuntimeConfig().collectionJob })
   return run
 })

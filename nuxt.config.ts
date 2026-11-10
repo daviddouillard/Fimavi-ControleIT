@@ -32,6 +32,10 @@ export default defineNuxtConfig({
     adminRole: '',
     // NUXT_MAIL_SENDER : boîte d'envoi des emails aux valideurs (ex. helpdesk@…)
     mailSender: '',
+    // NUXT_COLLECTION_JOB : Job Cloud Run des collectes (projects/<projet>/locations/<région>/jobs/<job>) ; vide = collecte dans le processus.
+    collectionJob: '',
+    // NUXT_COLLECTION_RUN_ID : posé uniquement par le lancement du Job (le conteneur exécute cette collecte puis s'arrête).
+    collectionRunId: '',
     public: {}
   },
 

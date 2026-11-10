@@ -155,6 +155,9 @@ if (-not (Exists { gcloud run services describe $Service --region $Region --proj
 gcloud run services update $Service --region $Region --project $Project --no-invoker-iam-check | Out-Null
 Check 'gcloud run services update --no-invoker-iam-check'
 
+Step 'Job Cloud Run des collectes'
+& (Join-Path $PSScriptRoot 'gcp-collect-job.ps1')
+
 Step 'Variables GitHub (non secrètes)'
 gh variable set GCP_PROJECT_ID --repo $Repo --body $Project
 Check 'gh variable set GCP_PROJECT_ID'

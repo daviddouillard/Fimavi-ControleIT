@@ -4,6 +4,7 @@ import type { ControlModule } from '../../server/controls/types'
 import { auditLog, checkItems, collectionRuns, controlSessions, notifications, remediations, users } from '../../server/db/schema'
 import { assignItems, markRemediationDone, respondToCheck, setSessionStatus } from '../../server/services/checks'
 import { latestRun, runCollection, startCollection } from '../../server/services/collection'
+import { launchCollection, runCollectionById } from '../../server/services/collectionLauncher'
 import { syncDirectory } from '../../server/services/directory'
 import { assignmentEmail, sendAssignmentEmails, type MailMessage } from '../../server/services/notifications'
 import { addConnection, addSite, deleteConnection, getSettings, saveDomains } from '../../server/services/settings'
@@ -118,6 +119,52 @@ describe('collecte', () => {
     await runCollection(db, run.id, module([[line(1)]]))
     expect(await latestRun(db, s.session.id)).toMatchObject({ status: 'failed', error: expect.stringContaining('brouillon') })
     expect(await db.select().from(checkItems).where(and(eq(checkItems.sessionId, s.session.id), eq(checkItems.dedupKey, 'k1')))).toHaveLength(0)
+  })
+
+  it('lance le Job Cloud Run avec le compte de service et l\'identifiant de la collecte', async () => {
+    const s = await seedSession(db, 'draft')
+    await saveDomains(db, s.admin, ['fimavi.com'])
+    const run = await startCollection(db, s.admin, s.session.id)
+    const calls: { url: string, init?: RequestInit }[] = []
+    const fetchImpl = async (url: string, init?: RequestInit) => {
+      calls.push({ url, init })
+      return url.startsWith('http://metadata.google.internal/')
+        ? Response.json({ access_token: 'sa-token' })
+        : Response.json({ name: 'operation' })
+    }
+    await launchCollection(db, run.id, { job: 'projects/fimavi-controleit/locations/europe-west9/jobs/controleit-collect', fetchImpl })
+
+    expect(calls).toHaveLength(2)
+    expect(new Headers(calls[0]!.init?.headers).get('Metadata-Flavor')).toBe('Google')
+    expect(calls[1]!.url).toBe('https://run.googleapis.com/v2/projects/fimavi-controleit/locations/europe-west9/jobs/controleit-collect:run')
+    expect(new Headers(calls[1]!.init?.headers).get('Authorization')).toBe('Bearer sa-token')
+    expect(JSON.parse(String(calls[1]!.init?.body))).toEqual({ overrides: { containerOverrides: [{ env: [{ name: 'NUXT_COLLECTION_RUN_ID', value: run.id }] }] } })
+    expect(await latestRun(db, s.session.id)).toMatchObject({ status: 'running' })
+
+    // Le conteneur du Job exécute ensuite la collecte, une seule fois.
+    expect(await runCollectionById(db, run.id, () => module([[line(1)]]))).toBe(true)
+    expect(await latestRun(db, s.session.id)).toMatchObject({ status: 'succeeded' })
+    expect(await runCollectionById(db, run.id, () => module([[line(2)]]))).toBe(false)
+  })
+
+  it('consigne l\'échec du lancement du Job et libère la session', async () => {
+    const s = await seedSession(db, 'draft')
+    await saveDomains(db, s.admin, ['fimavi.com'])
+    const job = 'projects/fimavi-controleit/locations/europe-west9/jobs/controleit-collect'
+    const denied = async (url: string) => url.startsWith('http://metadata.google.internal/')
+      ? Response.json({ access_token: 'sa-token' })
+      : new Response('forbidden', { status: 403 })
+
+    const first = await startCollection(db, s.admin, s.session.id)
+    await launchCollection(db, first.id, { job, fetchImpl: denied })
+    expect(await latestRun(db, s.session.id)).toMatchObject({ status: 'failed', error: 'Lancement de la collecte impossible' })
+
+    // Nom de Job invalide : aucun appel réseau.
+    const second = await startCollection(db, s.admin, s.session.id)
+    let called = false
+    await launchCollection(db, second.id, { job: 'https://evil.example/jobs/x', fetchImpl: async () => { called = true; return new Response() } })
+    expect(called).toBe(false)
+    expect(await latestRun(db, s.session.id)).toMatchObject({ status: 'failed' })
   })
 
   it('considère comme interrompue une collecte sans signe de vie', async () => {

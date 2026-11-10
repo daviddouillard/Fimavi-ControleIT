@@ -1,9 +1,9 @@
 import { and, eq, inArray } from 'drizzle-orm'
-import { createError, defineEventHandler, readValidatedBody } from 'nuxt/server'
+import { createError, defineEventHandler, readValidatedBody, useRuntimeConfig } from 'nuxt/server'
 import { createSessionSchema } from '../../../../shared/schemas/session'
-import { controlModule } from '../../../controls'
 import { controlSessions, sharepointSites } from '../../../db/schema'
-import { runCollection, startCollection } from '../../../services/collection'
+import { startCollection } from '../../../services/collection'
+import { launchCollection } from '../../../services/collectionLauncher'
 import { recordAudit } from '../../../utils/audit'
 import { requireAdmin } from '../../../utils/authz'
 import { useDb } from '../../../utils/db'
@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
   })
 
   const run = await startCollection(db, admin, session.id, event)
-  // Collecte en arrière-plan : la page de la session en suit l'avancement.
-  runCollection(db, run.id, controlModule(session.template)).catch(error => console.error('Collecte non démarrée :', error instanceof Error ? error.message : 'erreur inconnue'))
+  // Collecte exécutée côté serveur (Cloud Run Job) : la page de la session en suit l'avancement.
+  await launchCollection(db, run.id, { job: useRuntimeConfig().collectionJob })
   return session
 })
