@@ -172,7 +172,7 @@ describe('collecte', () => {
     const s = await seedSession(db, 'draft')
     await saveDomains(db, s.admin, ['fimavi.com'])
     const run = await startCollection(db, s.admin, s.session.id)
-    await db.update(collectionRuns).set({ heartbeatAt: new Date(Date.now() - 10 * 60 * 1000) }).where(eq(collectionRuns.id, run.id))
+    await db.update(collectionRuns).set({ heartbeatAt: new Date(Date.now() - 10 * 60 * 1000 - 1000) }).where(eq(collectionRuns.id, run.id))
     expect(await latestRun(db, s.session.id)).toMatchObject({ status: 'failed', error: 'Collecte interrompue' })
   })
 })
