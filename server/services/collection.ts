@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm'
 import { createError, type RequestEvent } from 'nuxt/server'
-import type { ControlLine, ControlModule } from '../controls/types'
+import { CollectionStopped, type ControlLine, type ControlModule } from '../controls/types'
 import { checkItems, collectionRuns, controlSessions } from '../db/schema'
 import { recordAudit } from '../utils/audit'
 import type { Database } from '../utils/db'
@@ -9,6 +9,8 @@ import { listDomains } from './settings'
 
 /** Une collecte sans signe de vie depuis ce délai est considérée comme interrompue (instance arrêtée…). */
 export const STALE_AFTER_MS = 10 * 60 * 1000
+/** Fréquence du signe de vie d'une collecte en cours (bien inférieure au délai d'interruption). */
+export const HEARTBEAT_MS = 60 * 1000
 
 export interface CollectionReport {
   added: number
@@ -63,18 +65,27 @@ export async function startCollection(db: Database, actor: Actor, sessionId: str
 }
 
 /** Exécute la collecte (en arrière-plan) et consigne le résultat. Ne lève jamais d'exception. */
-export async function runCollection(db: Database, runId: string, module: ControlModule) {
+export async function runCollection(db: Database, runId: string, module: ControlModule, { heartbeatMs = HEARTBEAT_MS } = {}) {
   const [run] = await db.select().from(collectionRuns).where(eq(collectionRuns.id, runId))
   if (!run) return
   const [session] = await db.select().from(controlSessions).where(eq(controlSessions.id, run.sessionId))
   if (!session) return
 
   const report: CollectionReport = { added: 0, duplicates: 0, errors: [] }
-  const save = (extra: Partial<typeof collectionRuns.$inferInsert> = {}) =>
-    db.update(collectionRuns).set({ heartbeatAt: new Date(), progress: { ...report }, ...extra })
+  // Collecte déclarée interrompue ou terminée ailleurs : on arrête au prochain point de contrôle.
+  let stopped = false
+  const save = async (extra: Partial<typeof collectionRuns.$inferInsert> = {}) => {
+    const rows = await db.update(collectionRuns).set({ heartbeatAt: new Date(), progress: { ...report }, ...extra })
       .where(and(eq(collectionRuns.id, runId), eq(collectionRuns.status, 'running')))
+      .returning({ id: collectionRuns.id })
+    if (!rows.length) stopped = true
+  }
+  const checkpoint = () => {
+    if (stopped) throw new CollectionStopped('Collecte arrêtée : exécution interrompue')
+  }
 
   async function addLines(lines: ControlLine[]) {
+    checkpoint()
     if (!lines.length) return
     for (let i = 0; i < lines.length; i += 500) {
       const batch = lines.slice(i, i + 500)
@@ -93,8 +104,8 @@ export async function runCollection(db: Database, runId: string, module: Control
           .where(eq(controlSessions.id, session!.id)).for('share')
         const [self] = await tx.select({ status: collectionRuns.status }).from(collectionRuns)
           .where(eq(collectionRuns.id, runId)).for('update')
-        if (current?.status !== 'draft') throw new Error('Collecte arrêtée : la session n\'est plus en brouillon')
-        if (self?.status !== 'running') throw new Error('Collecte arrêtée : exécution interrompue')
+        if (current?.status !== 'draft') throw new CollectionStopped('Collecte arrêtée : la session n\'est plus en brouillon')
+        if (self?.status !== 'running') throw new CollectionStopped('Collecte arrêtée : exécution interrompue')
 
         const [max] = await tx.select({ value: sql<number>`coalesce(max(${checkItems.rowNumber}), 0)::int` }).from(checkItems)
           .where(eq(checkItems.sessionId, session!.id))
@@ -108,7 +119,13 @@ export async function runCollection(db: Database, runId: string, module: Control
       report.duplicates += fresh.length - inserted.length
     }
     await save()
+    checkpoint()
   }
+
+  // Signe de vie régulier, même pendant une longue étape sans avancement visible (permissions, attente Graph).
+  const heartbeat = setInterval(() => {
+    save().catch(error => console.error('Collecte : signe de vie non enregistré :', error instanceof Error ? error.message : 'erreur inconnue'))
+  }, heartbeatMs)
 
   try {
     await module.collect({
@@ -119,6 +136,7 @@ export async function runCollection(db: Database, runId: string, module: Control
       progress: async (state) => {
         Object.assign(report, state)
         await save()
+        checkpoint()
       },
       siteError: async (source, message) => {
         report.errors.push({ source, message })
@@ -130,6 +148,8 @@ export async function runCollection(db: Database, runId: string, module: Control
     const message = error instanceof Error ? error.message : 'erreur inconnue'
     console.error('Collecte en échec :', message)
     await save({ status: 'failed', finishedAt: new Date(), error: message }).catch(() => {})
+  } finally {
+    clearInterval(heartbeat)
   }
 
   await recordAudit(db, {

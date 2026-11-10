@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { sharepointSites, tenantConnections } from '../../db/schema'
 import type { Database } from '../../utils/db'
 import type { GraphClient } from '../../utils/graph'
-import type { CollectionContext, ControlModule } from '../types'
+import { CollectionStopped, type CollectionContext, type ControlModule } from '../types'
 import { collectSiteShares } from './collect'
 
 export const sharepointConfigSchema = z.object({ siteIds: z.array(z.uuid()).min(1).max(500) })
@@ -39,6 +39,7 @@ export function sharepointModule(deps: SharepointDeps): ControlModule {
             p => ctx.progress({ site: site.url, sitesDone: index, sitesTotal: sites.length, ...p }))
           await ctx.addLines(lines)
         } catch (error) {
+          if (error instanceof CollectionStopped) throw error
           // Un site inaccessible n'arrête pas la collecte des autres : l'erreur est remontée dans le compte rendu.
           await ctx.siteError(site.url, error instanceof Error ? error.message : 'erreur inconnue')
         }

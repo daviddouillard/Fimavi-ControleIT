@@ -21,3 +21,8 @@ export interface CollectionContext {
 export interface ControlModule {
   collect: (ctx: CollectionContext) => Promise<void>
 }
+
+/** Arrêt demandé (collecte interrompue, session sortie du brouillon) : ne doit pas être traité comme une erreur de site. */
+export class CollectionStopped extends Error {
+  override name = 'CollectionStopped'
+}

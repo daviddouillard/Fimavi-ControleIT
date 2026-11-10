@@ -44,3 +44,14 @@ Aucun constat ouvert.
 Le premier essai en production a échoué avec « Lancement de la collecte impossible ». Les journaux indiquaient : jeton du compte de service indisponible (404). L'adresse du serveur de métadonnées était erronée (`instance/service-account/token`) ; la bonne adresse est `instance/service-accounts/default/token`. Le test vérifie désormais cette adresse.
 
 TNR après correctif : typecheck OK, 71/71, 23/23.
+
+## Correctif : collecte déclarée interrompue à tort
+
+Sur un gros site, la collecte a été déclarée « interrompue » au bout de 10 minutes alors que son Job tournait toujours. Le signe de vie n'était mis à jour qu'à chaque page d'éléments parcourue, pas pendant l'analyse des permissions des éléments partagés. Le Job a continué sans plus rien pouvoir enregistrer, et une relance a fait tourner deux Jobs en parallèle.
+
+Corrections :
+- La collecte enregistre un signe de vie toutes les minutes, quelle que soit l'étape en cours.
+- Une collecte qui n'est plus « en cours » (interrompue, ou session sortie du brouillon) s'arrête au prochain point de contrôle. Les erreurs d'un site ne masquent plus cet arrêt.
+- L'avancement de l'analyse des permissions (x/y) et le nombre de lignes déjà présentes s'affichent sur la session.
+
+TNR : typecheck OK, 73/73 (2 tests ajoutés : signe de vie pendant une longue étape, arrêt d'une collecte interrompue), 23/23.

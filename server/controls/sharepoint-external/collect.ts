@@ -72,6 +72,9 @@ export interface CollectProgress {
   drivesDone: number
   drivesTotal: number
   itemsScanned: number
+  /** Éléments partagés dont les permissions ont été lues / à lire, pour la bibliothèque en cours. */
+  permissionsChecked: number
+  permissionsTotal: number
 }
 
 export async function collectSiteShares(
@@ -89,7 +92,7 @@ export async function collectSiteShares(
   }
 
   const lines = new Map<string, CollectedLine>()
-  const progress: CollectProgress = { drivesDone: 0, drivesTotal: drives.length, itemsScanned: 0 }
+  const progress: CollectProgress = { drivesDone: 0, drivesTotal: drives.length, itemsScanned: 0, permissionsChecked: 0, permissionsTotal: 0 }
   await onProgress(progress)
 
   for (const drive of drives) {
@@ -127,12 +130,16 @@ export async function collectSiteShares(
     // Racine de la bibliothèque + éléments partagés, des plus hauts aux plus profonds (héritage).
     const candidates = [...items.values()].filter(i => i.root || i.shared).sort((a, b) => depth(a) - depth(b))
     const grantsByItem = new Map<string, ExternalGrant[]>()
+    progress.permissionsChecked = 0
+    progress.permissionsTotal = candidates.length
+    await onProgress(progress)
     await pool(candidates, 4, async (item) => {
       const grants: ExternalGrant[] = []
       for await (const page of graph.list(`drives/${encodeURIComponent(drive.id)}/items/${encodeURIComponent(item.id)}/permissions`)) {
         for (const permission of page) grants.push(...externalGrants(permission, internalDomains))
       }
       grantsByItem.set(item.id, grants)
+      if (++progress.permissionsChecked % 25 === 0) await onProgress(progress)
     })
 
     const nearestAnalyzedAncestor = (item: DriveItem): DriveItem | undefined => {

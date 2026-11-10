@@ -168,6 +168,44 @@ describe('collecte', () => {
     expect(await latestRun(db, s.session.id)).toMatchObject({ status: 'failed' })
   })
 
+  it('donne signe de vie pendant une longue étape sans avancement', async () => {
+    const s = await seedSession(db, 'draft')
+    await saveDomains(db, s.admin, ['fimavi.com'])
+    const run = await startCollection(db, s.admin, s.session.id)
+    const old = new Date(Date.now() - 9 * 60 * 1000)
+    await db.update(collectionRuns).set({ heartbeatAt: old }).where(eq(collectionRuns.id, run.id))
+    let seen: Date | undefined
+    await runCollection(db, run.id, {
+      async collect() {
+        await new Promise(resolve => setTimeout(resolve, 200))
+        ;[{ heartbeatAt: seen }] = await db.select({ heartbeatAt: collectionRuns.heartbeatAt }).from(collectionRuns).where(eq(collectionRuns.id, run.id))
+      }
+    }, { heartbeatMs: 20 })
+    expect(seen!.getTime()).toBeGreaterThan(old.getTime() + 60 * 1000)
+    expect(await latestRun(db, s.session.id)).toMatchObject({ status: 'succeeded' })
+  })
+
+  it('arrête au point de contrôle suivant une collecte déclarée interrompue entre-temps', async () => {
+    const s = await seedSession(db, 'draft')
+    await saveDomains(db, s.admin, ['fimavi.com'])
+    const run = await startCollection(db, s.admin, s.session.id)
+    let continued = false
+    await runCollection(db, run.id, {
+      async collect(ctx) {
+        await ctx.addLines([line(1)])
+        await db.update(collectionRuns).set({ status: 'failed', error: 'Collecte interrompue' }).where(eq(collectionRuns.id, run.id))
+        await ctx.progress({ itemsScanned: 10 })
+        continued = true
+        await ctx.addLines([line(2)])
+      }
+    })
+    expect(continued).toBe(false)
+    expect(await latestRun(db, s.session.id)).toMatchObject({ status: 'failed', error: 'Collecte interrompue' })
+    const keys = (await db.select({ key: checkItems.dedupKey }).from(checkItems).where(eq(checkItems.sessionId, s.session.id))).map(r => r.key)
+    expect(keys).toContain('k1')
+    expect(keys).not.toContain('k2')
+  })
+
   it('considère comme interrompue une collecte sans signe de vie', async () => {
     const s = await seedSession(db, 'draft')
     await saveDomains(db, s.admin, ['fimavi.com'])

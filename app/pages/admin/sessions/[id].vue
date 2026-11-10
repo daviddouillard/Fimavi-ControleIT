@@ -183,7 +183,7 @@ const unanswered = computed(() => (data.value?.items ?? []).filter(isPending).le
 
 // Collecte des partages (en arrière-plan côté serveur) : avancement interrogé toutes les 3 secondes.
 type Run = NonNullable<NonNullable<typeof data.value>['run']>
-interface Progress { added?: number, duplicates?: number, sitesDone?: number, sitesTotal?: number, itemsScanned?: number, site?: string, errors?: { source: string, message: string }[] }
+interface Progress { added?: number, duplicates?: number, sitesDone?: number, sitesTotal?: number, itemsScanned?: number, permissionsChecked?: number, permissionsTotal?: number, site?: string, errors?: { source: string, message: string }[] }
 const run = ref<Run | null>(null)
 watch(() => data.value?.run, (value) => { run.value = value ?? null }, { immediate: true })
 const progress = computed(() => (run.value?.progress ?? {}) as Progress)
@@ -261,7 +261,9 @@ function sendEmails() {
           <UIcon name="i-lucide-loader-circle" class="animate-spin" />
           En cours : site {{ Math.min((progress.sitesDone ?? 0) + 1, progress.sitesTotal ?? 1) }}/{{ progress.sitesTotal ?? '?' }}
           <span v-if="progress.site" class="text-muted break-all">({{ progress.site }})</span>
-          · {{ progress.itemsScanned ?? 0 }} éléments parcourus · {{ progress.added ?? 0 }} partage(s) trouvé(s)
+          · {{ progress.itemsScanned ?? 0 }} éléments parcourus
+          <template v-if="progress.permissionsTotal">· partages analysés {{ progress.permissionsChecked ?? 0 }}/{{ progress.permissionsTotal }}</template>
+          · {{ progress.added ?? 0 }} ligne(s) ajoutée(s)<template v-if="progress.duplicates">, {{ progress.duplicates }} déjà présente(s)</template>
         </p>
         <p v-else-if="run.status === 'succeeded'">
           Terminée le {{ formatDateTime(run.finishedAt) }} : {{ progress.added ?? 0 }} ligne(s) ajoutée(s),
