@@ -71,3 +71,26 @@ Restent externes :
 Sécurité : la règle ne fait que réduire les lignes remontées, à partir de données fournies par Graph et l'annuaire. Pas de nouvelle entrée utilisateur.
 
 TNR : typecheck OK, 76/76 (3 tests ajoutés), 23/23.
+
+## Évolution : détection complète des partages (Sites.Selected, contrôle total par site)
+
+Constat : sur 6 sites, aucun partage de dossier ou de fichier n'a été remonté. Sans en-tête particulier, la facette `shared` renvoyée par le delta Graph ne signale pas les éléments qui ont leurs propres permissions. D'après la documentation Microsoft, le traitement des permissions par delta exige le contrôle total.
+
+Décision de l'administrateur IT : accorder le **contrôle total uniquement sur les sites choisis** (`Sites.Selected` + rôle `fullcontrol`), plutôt que `Sites.FullControl.All` sur tout le tenant.
+
+- Collecte :
+  - delta avec `Prefer: hierarchicalsharing`, qui marque tout élément à permissions propres, même sans lien ;
+  - vérification du contrôle total par site. Un site en lecture seule est signalé en erreur de site, sans arrêter la collecte.
+- Bouton « Tester » : indique « Accès OK » (contrôle total) ou « Lecture seule ».
+- `infra/grant-site-fullcontrol.ps1` :
+  - octroi site par site par un administrateur SharePoint (Microsoft Graph PowerShell, connexion déléguée) ;
+  - URL validée (`*.sharepoint.com`) ;
+  - idempotent.
+
+Sécurité :
+- Le droit d'écriture est limité aux sites désignés. Le code n'appelle Graph qu'en lecture (`GET`), à part `sendMail`.
+- L'octroi n'est pas automatisable par l'application, qui ne détient pas `Sites.FullControl.All`.
+- Le jeton reste limité à `https://graph.microsoft.com/v1.0/`.
+- À réévaluer après validation : retirer `Sites.Read.All` si `Sites.Selected` suffit sur les sites désignés.
+
+TNR : typecheck OK, 78/78 (tests ajoutés : en-tête hierarchicalsharing, site en lecture seule, erreur de vérification), 23/23.

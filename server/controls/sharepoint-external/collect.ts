@@ -1,13 +1,17 @@
 import { z } from 'zod'
-import type { GraphClient } from '../../utils/graph'
+import { GraphError, type GraphClient } from '../../utils/graph'
 import { ACCESS_LABELS, externalGrants, ROLE_LABELS, type ExternalGrant } from './permissions'
 
 /**
  * Collecte des partages externes d'un site SharePoint via Microsoft Graph (lecture seule, Sites.Read.All).
  *
- * Pour chaque bibliothèque du site : parcours de tous les éléments (delta), puis lecture des permissions de la
- * racine et des éléments marqués comme partagés (facette `shared`). SharePoint ne renvoie pas `inheritedFrom` :
- * un partage déjà présent sur un dossier parent analysé est considéré comme hérité et n'est pas répété.
+ * Pour chaque bibliothèque du site : parcours de tous les éléments (delta avec « Prefer: hierarchicalsharing »), puis
+ * lecture des permissions de la racine et des éléments porteurs de la facette `shared`. Avec cet en-tête, la facette
+ * marque chaque élément qui a ses propres permissions (racine d'une hiérarchie de partage, même sans lien).
+ * Graph ne la renvoie de façon fiable qu'avec le contrôle total sur le site : l'application le reçoit site par site
+ * (Sites.Selected + rôle fullcontrol, voir infra/grant-site-fullcontrol.ps1). Sans lui, la collecte le signale.
+ * SharePoint ne renvoie pas `inheritedFrom` : un partage déjà présent sur un dossier parent analysé est considéré
+ * comme hérité et n'est pas répété.
  */
 
 export interface SiteTarget {
@@ -70,6 +74,26 @@ export async function resolveSite(graph: GraphClient, url: string) {
   return siteSchema.parse(await graph.get(`${sitePath(url)}?$select=id,displayName,webUrl`))
 }
 
+/**
+ * L'application a-t-elle le contrôle total sur le site ? La liste des permissions applicatives du site
+ * n'est accessible qu'avec ce niveau de droit ; un refus (401/403) signifie lecture seule.
+ */
+export async function hasFullControl(graph: GraphClient, siteId: string): Promise<boolean> {
+  try {
+    await graph.get(`sites/${encodeURIComponent(siteId)}/permissions?$top=1`)
+    return true
+  } catch (error) {
+    if (error instanceof GraphError && (error.status === 401 || error.status === 403)) return false
+    throw error
+  }
+}
+
+export interface SiteShares {
+  lines: CollectedLine[]
+  /** Faux : contrôle total non accordé, des partages de dossiers ou fichiers peuvent manquer. */
+  fullControl: boolean
+}
+
 export interface CollectProgress {
   drivesDone: number
   drivesTotal: number
@@ -84,9 +108,10 @@ export async function collectSiteShares(
   target: SiteTarget,
   internalDomains: ReadonlySet<string>,
   onProgress: (p: CollectProgress) => Promise<void> | void = () => {}
-): Promise<CollectedLine[]> {
+): Promise<SiteShares> {
   const site = await resolveSite(graph, target.url)
   const siteName = site.displayName ?? target.url
+  const fullControl = await hasFullControl(graph, site.id)
 
   const drives: z.infer<typeof driveSchema>[] = []
   for await (const page of graph.list(`sites/${encodeURIComponent(site.id)}/drives?$select=id,name,webUrl,driveType`)) {
@@ -101,7 +126,7 @@ export async function collectSiteShares(
     const driveName = drive.name ?? 'Documents'
     const items = new Map<string, DriveItem>()
     const select = 'id,name,webUrl,parentReference,folder,root,shared,deleted'
-    for await (const page of graph.list(`drives/${encodeURIComponent(drive.id)}/root/delta?$select=${select}`)) {
+    for await (const page of graph.list(`drives/${encodeURIComponent(drive.id)}/root/delta?$select=${select}`, { headers: { Prefer: 'hierarchicalsharing' } })) {
       for (const raw of page) {
         const parsed = driveItemSchema.safeParse(raw)
         if (!parsed.success) continue
@@ -185,5 +210,5 @@ export async function collectSiteShares(
     await onProgress(progress)
   }
 
-  return [...lines.values()]
+  return { lines: [...lines.values()], fullControl }
 }

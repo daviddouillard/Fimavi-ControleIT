@@ -26,8 +26,11 @@ export class GraphError extends Error {
 /** Accès Graph d'un tenant : lecture d'une ressource et parcours de toutes ses pages. */
 export interface GraphClient {
   get: (pathOrUrl: string) => Promise<unknown>
-  /** Toutes les pages d'une collection (suivi de @odata.nextLink, puis du deltaLink final ignoré). */
-  list: (pathOrUrl: string) => AsyncGenerator<unknown[]>
+  /**
+   * Toutes les pages d'une collection (suivi de @odata.nextLink, puis du deltaLink final ignoré).
+   * Les en-têtes éventuels (ex. Prefer) sont renvoyés à chaque page.
+   */
+  list: (pathOrUrl: string, options?: { headers?: Record<string, string> }) => AsyncGenerator<unknown[]>
   post: (path: string, body: unknown) => Promise<void>
 }
 
@@ -94,11 +97,11 @@ export function graphClient(tenant: string, fetchImpl: typeof fetch = fetch): Gr
     async get(pathOrUrl) {
       return (await request(absolute(pathOrUrl))).json()
     },
-    async* list(pathOrUrl) {
+    async* list(pathOrUrl, options = {}) {
       let url: string | undefined = absolute(pathOrUrl)
       while (url) {
         const page = z.object({ 'value': z.array(z.unknown()), '@odata.nextLink': z.string().optional() })
-          .parse(await (await request(url)).json())
+          .parse(await (await request(url, { headers: options.headers })).json())
         yield page.value
         url = page['@odata.nextLink']
       }

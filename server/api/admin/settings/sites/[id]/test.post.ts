@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { createError, defineEventHandler } from 'nuxt/server'
-import { resolveSite } from '../../../../../controls/sharepoint-external/collect'
+import { hasFullControl, resolveSite } from '../../../../../controls/sharepoint-external/collect'
 import { sharepointSites, tenantConnections } from '../../../../../db/schema'
 import { markSiteChecked } from '../../../../../services/settings'
 import { requireAdmin } from '../../../../../utils/authz'
@@ -8,7 +8,7 @@ import { useDb } from '../../../../../utils/db'
 import { graphClient, GraphError } from '../../../../../utils/graph'
 import { requireUuidParam } from '../../../../../utils/params'
 
-/** Vérifie que l'application peut lire le site (consentement du tenant, URL correcte). */
+/** Vérifie que l'application peut lire le site (consentement, URL) et si elle y a le contrôle total (détection complète). */
 export default defineEventHandler(async (event) => {
   await requireAdmin(event)
   const id = requireUuidParam(event, 'id')
@@ -21,8 +21,10 @@ export default defineEventHandler(async (event) => {
   try {
     const resolved = await resolveSite(graphClient(site.tenantId), site.url)
     const displayName = resolved.displayName ?? site.url
+    const graph = graphClient(site.tenantId)
+    const fullControl = await hasFullControl(graph, resolved.id)
     await markSiteChecked(db, id, displayName)
-    return { ok: true, displayName }
+    return { ok: true, displayName, fullControl }
   } catch (error) {
     const status = error instanceof GraphError ? error.status : 0
     const reason = status === 404

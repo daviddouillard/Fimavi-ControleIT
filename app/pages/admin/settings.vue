@@ -88,8 +88,12 @@ const testing = ref<string | null>(null)
 async function testSite(id: string) {
   testing.value = id
   try {
-    const r = await $fetch<{ ok: boolean, displayName?: string, message?: string }>(`/api/admin/settings/sites/${id}/test`, { method: 'POST' })
-    toast.add(r.ok ? { title: `Accès OK : ${r.displayName}`, color: 'success' } : { title: 'Accès impossible', description: r.message, color: 'error' })
+    const r = await $fetch<{ ok: boolean, displayName?: string, fullControl?: boolean, message?: string }>(`/api/admin/settings/sites/${id}/test`, { method: 'POST' })
+    toast.add(!r.ok
+      ? { title: 'Accès impossible', description: r.message, color: 'error' }
+      : r.fullControl
+        ? { title: `Accès OK : ${r.displayName}`, description: 'Contrôle total accordé : tous les partages seront détectés.', color: 'success' }
+        : { title: `Lecture seule : ${r.displayName}`, description: 'Contrôle total non accordé (Sites.Selected) : les partages de dossiers et de fichiers ne seront pas détectés.', color: 'warning', duration: 10000 })
     await refresh()
   } finally {
     testing.value = null

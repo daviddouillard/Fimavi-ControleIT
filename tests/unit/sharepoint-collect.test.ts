@@ -1,20 +1,25 @@
 import { describe, expect, it } from 'vitest'
 import { collectSiteShares, sitePath } from '../../server/controls/sharepoint-external/collect'
-import type { GraphClient } from '../../server/utils/graph'
+import { GraphError, type GraphClient } from '../../server/utils/graph'
 
 /** Faux client Graph : réponses indexées par chemin (sans paramètres). */
-function fakeGraph(routes: Record<string, unknown[] | unknown>): GraphClient & { calls: string[] } {
+function fakeGraph(routes: Record<string, unknown[] | unknown>): GraphClient & { calls: string[], headers: Record<string, Record<string, string> | undefined> } {
   const calls: string[] = []
+  const headers: Record<string, Record<string, string> | undefined> = {}
   const lookup = (path: string) => {
     const key = path.split('?')[0]!
     calls.push(key)
     if (!(key in routes)) throw new Error(`route inattendue : ${key}`)
-    return routes[key]
+    const value = routes[key]
+    if (value instanceof GraphError) throw value
+    return value
   }
   return {
     calls,
+    headers,
     get: async path => lookup(path),
-    async* list(path) {
+    async* list(path, options) {
+      headers[path.split('?')[0]!] = options?.headers
       const value = lookup(path) as unknown[]
       // Deux pages pour vérifier le parcours paginé.
       yield value.slice(0, 1)
@@ -36,6 +41,7 @@ describe('sitePath', () => {
 describe('collectSiteShares', () => {
   const routes = {
     'sites/fimavi.sharepoint.com:/sites/direction': { id: 'site-1', displayName: 'Direction', webUrl: 'https://fimavi.sharepoint.com/sites/direction' },
+    'sites/site-1/permissions': [{ id: 'app', roles: ['fullcontrol'] }],
     'sites/site-1/drives': [{ id: 'drive-1', name: 'Documents' }],
     'drives/drive-1/root/delta': [
       { id: 'root', name: 'root', root: {} },
@@ -59,7 +65,10 @@ describe('collectSiteShares', () => {
 
   it('remonte les partages externes, sans héritage ni doublon, et ne lit que les éléments partagés', async () => {
     const graph = fakeGraph(routes)
-    const lines = await collectSiteShares(graph, { url: 'https://fimavi.sharepoint.com/sites/direction', tenantId: 't1', tenantName: 'Fimavi' }, domains)
+    const { lines, fullControl } = await collectSiteShares(graph, { url: 'https://fimavi.sharepoint.com/sites/direction', tenantId: 't1', tenantName: 'Fimavi' }, domains)
+    expect(fullControl).toBe(true)
+    // Tous les éléments à permissions propres sont demandés à Graph, pas seulement ceux qui ont un lien.
+    expect(graph.headers['drives/drive-1/root/delta']).toEqual({ Prefer: 'hierarchicalsharing' })
 
     expect(lines.map(l => [l.data.resource, l.data.beneficiary, l.data.access])).toEqual([
       ['Documents / Contrats', 'consultant@cabinet.com', 'Accès direct'],
@@ -76,6 +85,18 @@ describe('collectSiteShares', () => {
     const target = { url: 'https://fimavi.sharepoint.com/sites/direction', tenantId: 't1', tenantName: 'Fimavi' }
     const first = await collectSiteShares(fakeGraph(routes), target, domains)
     const second = await collectSiteShares(fakeGraph(routes), target, domains)
-    expect(second.map(l => l.dedupKey)).toEqual(first.map(l => l.dedupKey))
+    expect(second.lines.map(l => l.dedupKey)).toEqual(first.lines.map(l => l.dedupKey))
+  })
+
+  it("signale l'absence de contrôle total sans interrompre la collecte", async () => {
+    const target = { url: 'https://fimavi.sharepoint.com/sites/direction', tenantId: 't1', tenantName: 'Fimavi' }
+    const result = await collectSiteShares(fakeGraph({ ...routes, 'sites/site-1/permissions': new GraphError(403, 'refus') }), target, domains)
+    expect(result.fullControl).toBe(false)
+    expect(result.lines).toHaveLength(2)
+  })
+
+  it('remonte les autres erreurs de vérification du droit', async () => {
+    const target = { url: 'https://fimavi.sharepoint.com/sites/direction', tenantId: 't1', tenantName: 'Fimavi' }
+    await expect(collectSiteShares(fakeGraph({ ...routes, 'sites/site-1/permissions': new GraphError(500, 'panne') }), target, domains)).rejects.toThrow('panne')
   })
 })

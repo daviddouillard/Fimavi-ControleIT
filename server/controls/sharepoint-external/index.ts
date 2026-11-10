@@ -47,9 +47,12 @@ export function sharepointModule(deps: SharepointDeps): ControlModule {
             memberIds = await tenantMemberIds(ctx.db, site.tenantId)
             membersByTenant.set(site.tenantId, memberIds)
           }
-          const lines = await collectSiteShares(deps.graphFor(site.tenantId), { url: site.url, tenantId: site.tenantId, tenantName: site.tenantName, memberIds }, ctx.internalDomains,
+          const { lines, fullControl } = await collectSiteShares(deps.graphFor(site.tenantId), { url: site.url, tenantId: site.tenantId, tenantName: site.tenantName, memberIds }, ctx.internalDomains,
             p => ctx.progress({ site: site.url, sitesDone: index, sitesTotal: sites.length, ...p }))
           await ctx.addLines(lines)
+          if (!fullControl) {
+            await ctx.siteError(site.url, 'Contrôle total non accordé à l\'application sur ce site : les partages de dossiers et de fichiers peuvent manquer (voir Paramètres)')
+          }
         } catch (error) {
           if (error instanceof CollectionStopped) throw error
           // Un site inaccessible n'arrête pas la collecte des autres : l'erreur est remontée dans le compte rendu.
