@@ -1,6 +1,6 @@
 import { createError, useRuntimeConfig } from 'nuxt/server'
 import type { Mailer } from '../services/notifications'
-import { graphClient } from './graph'
+import { graphClient, GraphError } from './graph'
 import { homeTenant } from './tenants'
 
 /**
@@ -12,10 +12,19 @@ export function graphMailer(): Mailer {
   if (!sender) throw createError({ status: 503, message: 'Messagerie non configurée (NUXT_MAIL_SENDER)' })
   const graph = graphClient(homeTenant())
   return async ({ to, subject, html }) => {
-    await graph.post(`users/${encodeURIComponent(sender)}/sendMail`, {
-      message: { subject, body: { contentType: 'HTML', content: html }, toRecipients: [{ emailAddress: { address: to } }] },
-      saveToSentItems: true
-    })
+    try {
+      await graph.post(`users/${encodeURIComponent(sender)}/sendMail`, {
+        message: { subject, body: { contentType: 'HTML', content: html }, toRecipients: [{ emailAddress: { address: to } }] },
+        saveToSentItems: true
+      })
+    } catch (error) {
+      // Message lisible dans l'historique des emails (jamais de jeton ni de détail technique Graph).
+      if (error instanceof GraphError && (error.status === 401 || error.status === 403)) {
+        throw new Error(`Envoi refusé par Exchange (${error.status}) : l'application n'est pas autorisée à envoyer depuis ${sender} (RBAC for Applications à configurer)`)
+      }
+      if (error instanceof GraphError && error.status === 404) throw new Error(`Boîte d'envoi ${sender} introuvable`)
+      throw error
+    }
   }
 }
 

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { CONTROL_TEMPLATES, type CreateSessionInput } from '#shared/schemas/session'
+import ShareBeneficiary from '~/components/ShareBeneficiary.vue'
+import ShareResource from '~/components/ShareResource.vue'
 
 const toast = useToast()
 const { data: sessions, refresh, status } = await useFetch('/api/admin/sessions', { default: () => [] })
@@ -78,12 +80,34 @@ async function syncDirectory() {
     syncing.value = false
   }
 }
+
+type SessionRow = (typeof sessions.value)[number]
+const percent = (s: SessionRow) => s.totalItems ? Math.round(((s.answered + s.closedWithoutValidation) / s.totalItems) * 100) : 0
+const sessionStats = (s: SessionRow) => [
+  { label: 'En attente', value: s.waiting, icon: 'i-lucide-hourglass', color: 'text-warning' },
+  { label: 'Sans valideur', value: s.unassigned, icon: 'i-lucide-user-plus', color: 'text-info' },
+  { label: 'À réattribuer', value: s.toReassign, icon: 'i-lucide-user-round-x', color: 'text-warning' },
+  { label: 'À retirer', value: s.remediationsTodo, icon: 'i-lucide-shield-x', color: 'text-error' }
+]
+const kpis = computed(() => [
+  { label: 'Réponses en attente', value: totals.value.pending, icon: 'i-lucide-hourglass', tone: 'bg-warning/10 text-warning' },
+  { label: 'Lignes à (ré)attribuer', value: totals.value.unassigned, icon: 'i-lucide-user-plus', tone: 'bg-info/10 text-info' },
+  { label: 'Accès à retirer (IT)', value: remediations.value.length, icon: 'i-lucide-shield-x', tone: 'bg-error/10 text-error' }
+])
 </script>
 
 <template>
-  <div class="space-y-6">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <h1 class="text-2xl font-semibold">Tableau de bord</h1>
+  <div class="space-y-8">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-4">
+        <div class="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <UIcon name="i-lucide-layout-dashboard" class="size-6" />
+        </div>
+        <div>
+          <h1 class="text-2xl font-semibold">Tableau de bord</h1>
+          <p class="text-muted">Campagnes de contrôle en cours et accès à retirer.</p>
+        </div>
+      </div>
       <div class="flex gap-2">
         <UButton icon="i-lucide-refresh-cw" color="neutral" variant="outline" :loading="syncing" @click="syncDirectory">
           Synchroniser l'annuaire
@@ -93,64 +117,94 @@ async function syncDirectory() {
     </div>
 
     <div class="grid gap-4 sm:grid-cols-3">
-      <UCard>
-        <p class="text-sm text-muted">Réponses en attente</p>
-        <p class="text-3xl font-semibold">{{ totals.pending }}</p>
-      </UCard>
-      <UCard>
-        <p class="text-sm text-muted">Lignes à (ré)attribuer</p>
-        <p class="text-3xl font-semibold">{{ totals.unassigned }}</p>
-      </UCard>
-      <UCard>
-        <p class="text-sm text-muted">Accès à retirer (IT)</p>
-        <p class="text-3xl font-semibold">{{ remediations.length }}</p>
-      </UCard>
+      <div v-for="kpi in kpis" :key="kpi.label" class="flex items-center gap-4 rounded-xl border border-default bg-default p-5">
+        <div class="flex size-12 items-center justify-center rounded-xl" :class="kpi.tone">
+          <UIcon :name="kpi.icon" class="size-6" />
+        </div>
+        <div>
+          <p class="text-3xl font-semibold leading-none">{{ kpi.value }}</p>
+          <p class="mt-1 text-sm text-muted">{{ kpi.label }}</p>
+        </div>
+      </div>
     </div>
 
-    <UCard>
-      <template #header>
-        <h2 class="font-medium">Accès à retirer ({{ remediations.length }})</h2>
+    <section class="space-y-4">
+      <div class="flex items-center gap-2">
+        <UIcon name="i-lucide-folder-kanban" class="size-5 text-primary" />
+        <h2 class="text-lg font-semibold">Sessions en cours ({{ active.length }})</h2>
+      </div>
+      <div v-if="status !== 'pending' && !active.length" class="flex flex-col items-center gap-2 rounded-xl border border-dashed border-default py-10 text-center text-muted">
+        <UIcon name="i-lucide-folder-open" class="size-8" />
+        Aucune session en cours.
+        <UButton icon="i-lucide-plus" variant="soft" class="mt-2" @click="openCreate">Créer une session</UButton>
+      </div>
+      <div class="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+        <NuxtLink
+          v-for="s in active"
+          :key="s.id"
+          :to="`/admin/sessions/${s.id}`"
+          class="group flex flex-col gap-4 rounded-xl border border-default bg-default p-5 transition hover:border-primary hover:shadow-md"
+        >
+          <div class="flex items-start gap-3">
+            <div class="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <UIcon name="i-lucide-share-2" class="size-5" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="text-lg font-semibold break-words group-hover:text-primary">{{ s.name }}</p>
+              <p class="text-sm text-muted">{{ templateLabel(s.template) }} · créée le {{ formatDate(s.createdAt) }}</p>
+            </div>
+            <UBadge :color="SESSION_STATUS_LABELS[s.status].color" variant="subtle" size="lg">
+              {{ SESSION_STATUS_LABELS[s.status].label }}
+            </UBadge>
+          </div>
+
+          <div>
+            <div class="mb-1.5 flex items-baseline justify-between text-sm">
+              <span class="text-muted">Avancement</span>
+              <span><strong class="text-base">{{ percent(s) }} %</strong> <span class="text-muted">· {{ s.answered + s.closedWithoutValidation }} / {{ s.totalItems }} lignes traitées</span></span>
+            </div>
+            <UProgress :model-value="s.answered + s.closedWithoutValidation" :max="Math.max(s.totalItems, 1)" size="md" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+            <div v-for="stat in sessionStats(s)" :key="stat.label" class="rounded-lg bg-elevated/60 px-3 py-2">
+              <p class="flex items-center gap-1.5 text-xs text-muted">
+                <UIcon :name="stat.icon" class="size-3.5" :class="stat.value ? stat.color : ''" /> {{ stat.label }}
+              </p>
+              <p class="text-lg font-semibold" :class="stat.value ? stat.color : 'text-muted'">{{ stat.value }}</p>
+            </div>
+          </div>
+
+          <span class="flex items-center gap-1 text-sm font-medium text-primary">
+            Ouvrir la session <UIcon name="i-lucide-arrow-right" class="size-4 transition group-hover:translate-x-0.5" />
+          </span>
+        </NuxtLink>
+      </div>
+    </section>
+
+    <section class="space-y-4">
+      <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <div class="flex items-center gap-2">
+          <UIcon name="i-lucide-shield-x" class="size-5 text-error" />
+          <h2 class="text-lg font-semibold">Accès à retirer ({{ remediations.length }})</h2>
+        </div>
         <p class="text-sm text-muted">Retirez l'accès dans SharePoint, puis cliquez sur « Fait ».</p>
-      </template>
-      <p v-if="!remediations.length" class="text-muted">Rien à retirer pour le moment.</p>
-      <ul class="divide-y divide-default">
-        <li v-for="r in remediations" :key="r.id" class="flex flex-wrap items-center gap-4 py-3">
-          <div class="min-w-48 flex-1">
-            <p class="font-medium">{{ r.label }}</p>
-            <p class="text-sm text-muted">
-              {{ r.sessionName }} · « {{ r.comment }} » — {{ r.respondedByName ?? 'valideur inconnu' }}
-            </p>
+      </div>
+      <div v-if="!remediations.length" class="flex items-center gap-3 rounded-xl border border-dashed border-default p-5 text-muted">
+        <UIcon name="i-lucide-party-popper" class="size-6" /> Rien à retirer pour le moment.
+      </div>
+      <ul v-else class="space-y-3">
+        <li v-for="r in remediations" :key="r.id" class="grid gap-4 rounded-xl border border-default bg-default p-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-start">
+          <ShareResource :data="r.data" :label="r.label" />
+          <ShareBeneficiary :data="r.data" />
+          <div class="text-sm">
+            <p class="flex items-center gap-1.5 text-muted"><UIcon name="i-lucide-message-square-quote" class="size-4" /> {{ r.respondedByName ?? 'Valideur inconnu' }} · {{ r.sessionName }}</p>
+            <p class="mt-1 line-clamp-3 break-words" :title="r.comment ?? ''">« {{ r.comment }} »</p>
           </div>
           <UButton icon="i-lucide-check" :loading="handling === r.id" :disabled="handling !== null" @click="markDone(r.id)">Fait</UButton>
         </li>
       </ul>
-    </UCard>
-
-    <UCard>
-      <template #header>
-        <h2 class="font-medium">Sessions en cours</h2>
-      </template>
-      <p v-if="status !== 'pending' && !active.length" class="text-muted">Aucune session en cours.</p>
-      <ul class="divide-y divide-default">
-        <li v-for="s in active" :key="s.id" class="py-3">
-          <NuxtLink :to="`/admin/sessions/${s.id}`" class="flex flex-wrap items-center gap-4">
-            <div class="min-w-48 flex-1">
-              <p class="font-medium">{{ s.name }}</p>
-              <p class="text-sm text-muted">{{ templateLabel(s.template) }} · échéance {{ formatDate(s.dueDate) }}</p>
-            </div>
-            <UBadge :color="SESSION_STATUS_LABELS[s.status].color" variant="subtle">
-              {{ SESSION_STATUS_LABELS[s.status].label }}
-            </UBadge>
-            <div class="w-48">
-              <UProgress :model-value="s.answered + s.closedWithoutValidation" :max="Math.max(s.totalItems, 1)" size="sm" />
-              <p class="mt-1 text-xs text-muted">
-                {{ s.answered + s.closedWithoutValidation }} / {{ s.totalItems }} traitées · {{ s.unassigned }} sans valideur · {{ s.toReassign }} à réattribuer · {{ s.remediationsTodo }} à retirer
-              </p>
-            </div>
-          </NuxtLink>
-        </li>
-      </ul>
-    </UCard>
+    </section>
 
     <UModal v-model:open="createOpen" title="Nouvelle session de contrôle">
       <template #body>

@@ -1,17 +1,12 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
+import ShareBeneficiary from '~/components/ShareBeneficiary.vue'
+import ShareResource from '~/components/ShareResource.vue'
+import { DEFAULT_EMAIL_MESSAGE, defaultEmailSubject, messageParagraphs, pendingSentence } from '#shared/emails'
+import { notifySchema } from '#shared/schemas/checks'
 
 const UCheckbox = resolveComponent('UCheckbox')
 const UBadge = resolveComponent('UBadge')
-const UIcon = resolveComponent('UIcon')
-
-const RESOURCE_ICONS: Record<string, string> = { Bibliothèque: 'i-lucide-library', Dossier: 'i-lucide-folder', Fichier: 'i-lucide-file-text' }
-
-/** « Nom <adresse> » → nom et adresse séparés (affichage sur deux lignes). */
-function splitBeneficiary(value: string | undefined): { name: string, email: string | null } {
-  const match = value?.match(/^(.*?)s*<([^>]+)>$/)
-  return match ? { name: match[1]!, email: match[2]! } : { name: value ?? '—', email: null }
-}
 const toast = useToast()
 
 const route = useRoute()
@@ -88,35 +83,12 @@ const columns: TableColumn<Item>[] = [
   {
     id: 'resource',
     header: 'Ressource',
-    cell: ({ row }) => {
-      const data = row.original.data
-      const path = data.resource ?? row.original.label
-      const parts = path.split(' / ')
-      const name = parts.pop() ?? path
-      const link = sharepointLink(data)
-      return h('div', { class: 'min-w-64 max-w-md 2xl:max-w-xl' }, [
-        h('div', { class: 'flex items-start gap-2' }, [
-          h(UIcon, { name: RESOURCE_ICONS[data.resourceType ?? ''] ?? 'i-lucide-file', class: 'mt-0.5 size-4 shrink-0 text-muted' }),
-          link
-            ? h('a', { href: link, target: '_blank', rel: 'noopener noreferrer', class: 'font-medium break-words hover:underline' }, name)
-            : h('span', { class: 'font-medium break-words' }, name)
-        ]),
-        parts.length ? h('div', { class: 'mt-0.5 pl-6 text-xs text-muted break-words', title: path }, parts.join(' / ')) : null
-      ])
-    }
+    cell: ({ row }) => h('div', { class: 'min-w-64 max-w-md 2xl:max-w-xl' }, [h(ShareResource, { data: row.original.data, label: row.original.label })])
   },
   {
     id: 'beneficiary',
     header: 'Bénéficiaire',
-    cell: ({ row }) => {
-      const { name, email } = splitBeneficiary(row.original.data.beneficiary)
-      return h('div', { class: 'min-w-56 max-w-xs 2xl:max-w-sm' }, [
-        h('div', { class: 'font-medium break-words' }, name),
-        email ? h('div', { class: 'text-xs text-muted break-all' }, email) : null,
-        h('div', { class: 'mt-1.5 flex flex-wrap gap-1' }, [row.original.data.access, row.original.data.role]
-          .filter(Boolean).map(label => h(UBadge, { color: 'neutral', variant: 'soft', size: 'sm', label })))
-      ])
-    }
+    cell: ({ row }) => h('div', { class: 'min-w-56 max-w-xs 2xl:max-w-sm' }, [h(ShareBeneficiary, { data: row.original.data })])
   },
   { accessorKey: 'assigneeName', header: 'Valideur', cell: ({ row }) => h('span', { class: 'block min-w-32' }, row.original.assigneeName ?? '—') },
   {
@@ -237,17 +209,36 @@ function relaunch() {
 }
 
 // Emails aux valideurs (envoi initial et relances)
-const recipients = ref<string[]>([])
-watch(() => data.value?.assignees, (list) => {
-  recipients.value = (list ?? []).filter(a => a.pending > 0).map(a => a.id)
-}, { immediate: true })
-function toggleRecipient(userId: string, checked: boolean) {
-  recipients.value = checked ? [...new Set([...recipients.value, userId])] : recipients.value.filter(r => r !== userId)
+// Emails aux valideurs : fenêtre de préparation (destinataires, objet, message modifiables).
+const pendingAssignees = computed(() => (data.value?.assignees ?? []).filter(a => a.pending > 0))
+const emailOpen = ref(false)
+const email = reactive<{ recipientIds: string[], subject: string, message: string }>({ recipientIds: [], subject: '', message: '' })
+function openEmail() {
+  email.recipientIds = pendingAssignees.value.map(a => a.id)
+  email.subject = defaultEmailSubject(session.value?.name ?? '')
+  email.message = DEFAULT_EMAIL_MESSAGE
+  emailOpen.value = true
 }
+function toggleRecipient(userId: string, checked: boolean) {
+  email.recipientIds = checked ? [...new Set([...email.recipientIds, userId])] : email.recipientIds.filter(r => r !== userId)
+}
+function toggleAllRecipients() {
+  email.recipientIds = email.recipientIds.length === pendingAssignees.value.length ? [] : pendingAssignees.value.map(a => a.id)
+}
+const canSendEmail = computed(() => notifySchema.safeParse(email).success)
+const preview = computed(() => {
+  const first = pendingAssignees.value.find(a => email.recipientIds.includes(a.id))
+  return { name: first?.displayName ?? 'Prénom Nom', pending: first?.pending ?? 1 }
+})
+const previewParagraphs = computed(() => messageParagraphs(email.message))
 function sendEmails() {
+  const parsed = notifySchema.safeParse(email)
+  if (!parsed.success) return
   return act(async () => {
-    const r = await $fetch(`/api/admin/sessions/${id.value}/notify`, { method: 'POST', body: { recipientIds: recipients.value } })
-    return `${r.sent} email(s) envoyé(s)${r.failed ? `, ${r.failed} en échec` : ''}${r.skipped ? `, ${r.skipped} sans ligne en attente` : ''}`
+    const r = await $fetch(`/api/admin/sessions/${id.value}/notify`, { method: 'POST', body: parsed.data })
+    emailOpen.value = false
+    if (r.failed) toast.add({ title: `${r.failed} email(s) en échec`, description: 'Voir le détail dans l\'historique des emails.', color: 'error' })
+    return `${r.sent} email(s) envoyé(s)${r.skipped ? `, ${r.skipped} sans ligne en attente` : ''}`
   })
 }
 </script>
@@ -345,61 +336,135 @@ function sendEmails() {
     <UCard>
       <template #header>
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 class="font-medium">Valideurs et emails</h2>
-            <p class="text-sm text-muted">
-              Un email indique à chaque valideur coché combien de lignes l'attendent. Renvoyez-le pour relancer.
-            </p>
+          <div class="flex items-center gap-3">
+            <div class="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <UIcon name="i-lucide-users-round" class="size-5" />
+            </div>
+            <div>
+              <h2 class="font-medium">Valideurs et emails</h2>
+              <p class="text-sm text-muted">Prévenez les valideurs qu'ils ont des lignes à vérifier. Renvoyez l'email pour relancer.</p>
+            </div>
           </div>
           <UButton
             icon="i-lucide-mail"
-            :disabled="session.status !== 'open' || !recipients.length"
-            :loading="busy"
-            @click="sendEmails"
+            :disabled="session.status !== 'open' || !pendingAssignees.length"
+            @click="openEmail"
           >
-            Envoyer l'email ({{ recipients.length }})
+            Préparer l'email
           </UButton>
         </div>
-        <p v-if="session.status === 'draft'" class="mt-2 text-sm text-muted">Ouvrez la session pour pouvoir envoyer les emails.</p>
+        <UAlert
+          v-if="session.status === 'draft'"
+          class="mt-3"
+          color="neutral"
+          variant="subtle"
+          icon="i-lucide-info"
+          description="Ouvrez la session pour pouvoir envoyer les emails."
+        />
       </template>
-      <p v-if="!data.assignees.length" class="text-sm text-muted">Aucune ligne assignée pour l'instant.</p>
-      <table v-else class="w-full text-sm">
-        <thead class="text-left text-muted">
-          <tr>
-            <th class="w-8 py-1" />
-            <th class="py-1">Valideur</th>
-            <th class="py-1">En attente</th>
-            <th class="py-1">Lignes</th>
-            <th class="py-1">Dernier email</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="a in data.assignees" :key="a.id" class="border-t border-default">
-            <td class="py-1">
-              <UCheckbox
-                :model-value="recipients.includes(a.id)"
-                :disabled="!a.pending"
-                :aria-label="`Envoyer l'email à ${a.displayName}`"
-                @update:model-value="(v: boolean | 'indeterminate') => toggleRecipient(a.id, v === true)"
-              />
-            </td>
-            <td class="py-1">{{ a.displayName }} <span class="text-muted">{{ a.mail }}</span></td>
-            <td class="py-1">{{ a.pending }}</td>
-            <td class="py-1">{{ a.total }}</td>
-            <td class="py-1">{{ a.lastSentAt ? `${formatDateTime(a.lastSentAt)} (${a.emailsSent} envoi(s))` : 'Jamais' }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <div v-if="!data.assignees.length" class="flex flex-col items-center gap-2 py-6 text-center text-sm text-muted">
+        <UIcon name="i-lucide-user-plus" class="size-8" />
+        Aucune ligne assignée pour l'instant.
+      </div>
+      <ul v-else class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <li v-for="a in data.assignees" :key="a.id" class="flex items-start gap-3 rounded-lg border border-default p-3">
+          <UAvatar :alt="a.displayName" size="md" />
+          <div class="min-w-0 flex-1">
+            <p class="font-medium">{{ a.displayName }}</p>
+            <p class="text-xs text-muted break-all">{{ a.mail ?? 'Adresse inconnue' }}</p>
+            <div class="mt-2 flex flex-wrap gap-1">
+              <UBadge :color="a.pending ? 'warning' : 'success'" variant="soft" size="sm" :icon="a.pending ? 'i-lucide-hourglass' : 'i-lucide-check'">
+                {{ a.pending ? `${a.pending} en attente` : 'Tout traité' }} / {{ a.total }}
+              </UBadge>
+              <UBadge color="neutral" variant="soft" size="sm" icon="i-lucide-mail">
+                {{ a.lastSentAt ? `Dernier email ${formatDateTime(a.lastSentAt)}` : 'Jamais prévenu' }}
+              </UBadge>
+            </div>
+          </div>
+        </li>
+      </ul>
       <details v-if="data.notifications.length" class="mt-4 text-sm">
-        <summary class="cursor-pointer">Historique des emails ({{ data.notifications.length }})</summary>
-        <ul class="mt-2 space-y-1">
-          <li v-for="n in data.notifications" :key="n.id">
-            <span class="text-muted">{{ formatDateTime(n.sentAt) }}</span> · {{ n.recipientName }} · {{ n.pendingCount }} ligne(s)
-            · {{ n.status === 'sent' ? 'envoyé' : `échec (${n.error})` }} · par {{ n.sentByName }}
+        <summary class="cursor-pointer font-medium">Historique des emails ({{ data.notifications.length }})</summary>
+        <ul class="mt-3 space-y-2">
+          <li v-for="n in data.notifications" :key="n.id" class="flex items-start gap-2">
+            <UIcon
+              :name="n.status === 'sent' ? 'i-lucide-circle-check' : 'i-lucide-circle-x'"
+              class="mt-0.5 size-4 shrink-0"
+              :class="n.status === 'sent' ? 'text-success' : 'text-error'"
+            />
+            <span>
+              <span class="text-muted">{{ formatDateTime(n.sentAt) }}</span> · {{ n.recipientName }} · {{ n.pendingCount }} ligne(s) · par {{ n.sentByName }}
+              <span v-if="n.status !== 'sent'" class="block text-error">{{ n.error }}</span>
+            </span>
           </li>
         </ul>
       </details>
     </UCard>
+
+    <UModal v-model:open="emailOpen" title="Prévenir les valideurs" description="Vérifiez les destinataires et le message, puis envoyez." :ui="{ content: 'sm:max-w-3xl' }">
+      <template #body>
+        <form id="email-form" class="space-y-6" @submit.prevent="sendEmails">
+          <section class="space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="flex items-center gap-2 text-sm font-medium">
+                <UIcon name="i-lucide-users-round" class="size-4" /> Destinataires ({{ email.recipientIds.length }})
+              </h3>
+              <UButton size="xs" variant="link" color="neutral" @click="toggleAllRecipients">
+                {{ email.recipientIds.length === pendingAssignees.length ? 'Tout décocher' : 'Tout cocher' }}
+              </UButton>
+            </div>
+            <ul class="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-default p-2">
+              <li v-for="a in pendingAssignees" :key="a.id" class="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-elevated">
+                <UCheckbox
+                  :model-value="email.recipientIds.includes(a.id)"
+                  :aria-label="`Envoyer l'email à ${a.displayName}`"
+                  @update:model-value="(v: boolean | 'indeterminate') => toggleRecipient(a.id, v === true)"
+                />
+                <UAvatar :alt="a.displayName" size="xs" />
+                <span class="min-w-0 flex-1">
+                  <span class="font-medium">{{ a.displayName }}</span>
+                  <span class="ml-2 text-xs text-muted break-all">{{ a.mail }}</span>
+                </span>
+                <UBadge color="warning" variant="soft" size="sm">{{ a.pending }} en attente</UBadge>
+              </li>
+            </ul>
+          </section>
+
+          <UFormField label="Objet" required>
+            <UInput v-model="email.subject" icon="i-lucide-text-cursor-input" class="w-full" :maxlength="200" />
+          </UFormField>
+          <UFormField label="Message" required :hint="`${email.message.length}/5000`">
+            <UTextarea v-model="email.message" class="w-full" :rows="7" autoresize :maxlength="5000" />
+          </UFormField>
+
+          <section class="space-y-2">
+            <h3 class="flex items-center gap-2 text-sm font-medium">
+              <UIcon name="i-lucide-eye" class="size-4" /> Aperçu pour {{ preview.name }}
+            </h3>
+            <div class="space-y-3 rounded-lg border border-default bg-elevated/50 p-4 text-sm">
+              <p class="font-medium">{{ email.subject }}</p>
+              <p>Bonjour {{ preview.name }},</p>
+              <p>
+                <span class="font-semibold">{{ pendingSentence(preview.pending, session.name) }}</span><br>
+                <span class="text-primary underline">Accéder à mes vérifications</span>
+              </p>
+              <p v-for="(lines, i) in previewParagraphs" :key="i">
+                <template v-for="(line, j) in lines" :key="j"><br v-if="j">{{ line }}</template>
+              </p>
+            </div>
+            <p class="text-xs text-muted">Le nombre de lignes et le lien vers ControleIT sont ajoutés à chaque email. Envoi depuis la boîte du service informatique.</p>
+          </section>
+        </form>
+      </template>
+      <template #footer>
+        <div class="flex w-full justify-end gap-2">
+          <UButton color="neutral" variant="ghost" @click="emailOpen = false">Annuler</UButton>
+          <UButton type="submit" form="email-form" icon="i-lucide-send" :loading="busy" :disabled="!canSendEmail">
+            Envoyer ({{ email.recipientIds.length }})
+          </UButton>
+        </div>
+      </template>
+    </UModal>
 
     <UCard>
       <template #header>

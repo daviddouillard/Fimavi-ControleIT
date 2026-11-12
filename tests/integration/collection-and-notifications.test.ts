@@ -5,6 +5,7 @@ import { auditLog, checkItems, collectionRuns, controlSessions, notifications, r
 import { assignItems, markRemediationDone, respondToCheck, setSessionStatus } from '../../server/services/checks'
 import { latestRun, runCollection, startCollection } from '../../server/services/collection'
 import { launchCollection, runCollectionById } from '../../server/services/collectionLauncher'
+import { notifySchema } from '../../shared/schemas/checks'
 import { syncDirectory } from '../../server/services/directory'
 import { assignmentEmail, sendAssignmentEmails, type MailMessage } from '../../server/services/notifications'
 import { addConnection, addSite, deleteConnection, getSettings, saveDomains } from '../../server/services/settings'
@@ -230,7 +231,7 @@ describe('emails aux valideurs', () => {
     expect(result).toEqual({ sent: 1, failed: 1, skipped: 1 })
     expect(sent).toHaveLength(1)
     expect(sent[0]).toMatchObject({ to: 'n1@fimavi.test' })
-    expect(sent[0]!.subject).toContain('2 vérifications')
+    expect(sent[0]!.html).toContain('2 vérifications en attente')
 
     const rows = await db.select().from(notifications).where(eq(notifications.sessionId, s.session.id))
     expect(rows.map(r => r.status).sort()).toEqual(['failed', 'sent'])
@@ -250,6 +251,26 @@ describe('emails aux valideurs', () => {
     const mail = assignmentEmail({ recipientName: '<b>Jean</b>', sessionName: 'Revue <script>alert(1)</script>', pending: 1, appUrl: 'https://app.test' })
     expect(mail.html).not.toContain('<script>')
     expect(mail.html).toContain('&lt;b&gt;Jean&lt;/b&gt;')
+  })
+
+  it('reprend l\'objet et le message de l\'admin, échappés, et ajoute toujours le nombre de lignes et le lien', () => {
+    const mail = assignmentEmail({
+      recipientName: 'Jean', sessionName: 'Revue T4', pending: 3, appUrl: 'https://app.test',
+      subject: 'Merci de répondre', message: 'Bonjour à tous\n<img src=x onerror=alert(1)>\n\nDeuxième paragraphe'
+    })
+    expect(mail.subject).toBe('Merci de répondre')
+    expect(mail.html).not.toContain('<img')
+    expect(mail.html).toContain('<p>Bonjour à tous<br>&lt;img src=x onerror=alert(1)&gt;</p>')
+    expect(mail.html).toContain('<p>Deuxième paragraphe</p>')
+    expect(mail.html).toContain('3 vérifications en attente')
+    expect(mail.html).toContain('href="https://app.test"')
+  })
+
+  it('refuse un objet sur plusieurs lignes ou un message vide', () => {
+    const base = { recipientIds: ['3f3f9c3d-d028-45c1-92f4-35e361d352b6'] }
+    expect(notifySchema.safeParse({ ...base, subject: 'Objet\nBcc: x@y.z' }).success).toBe(false)
+    expect(notifySchema.safeParse({ ...base, message: '   ' }).success).toBe(false)
+    expect(notifySchema.safeParse({ ...base, subject: 'Objet', message: 'Texte' }).success).toBe(true)
   })
 })
 

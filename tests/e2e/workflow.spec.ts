@@ -56,8 +56,12 @@ test('l\'admin ne peut pas envoyer les emails sans messagerie configurée', asyn
   await as(page, baseURL, 'admin')
   await page.goto(sessionUrl)
   await expect(page.getByRole('heading', { name: 'Valideurs et emails' })).toBeVisible()
-  await expect(page.getByRole('cell', { name: 'Valérie Valideuse valerie@fimavi.test' })).toBeVisible()
-  await page.getByRole('button', { name: /Envoyer l'email \(1\)/ }).click()
+  await expect(page.getByText('valerie@fimavi.test').first()).toBeVisible()
+  await page.getByRole('button', { name: 'Préparer l\'email' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByRole('checkbox', { name: 'Envoyer l\'email à Valérie Valideuse' })).toBeChecked()
+  await expect(dialog.getByRole('textbox').first()).toHaveValue(/partages externes à vérifier/)
+  await dialog.getByRole('button', { name: 'Envoyer (1)' }).click()
   await expect(page.getByText('Messagerie non configurée').first()).toBeVisible()
 })
 
@@ -68,7 +72,7 @@ test('le valideur répond : commentaire toujours obligatoire, trois choix possib
 
   await page.getByRole('button', { name: 'Répondre' }).first().click()
   const dialog = page.getByRole('dialog')
-  await expect(dialog.getByText('Documents / Projet 1', { exact: true })).toBeVisible()
+  await expect(dialog.getByText('Projet 1', { exact: true })).toBeVisible()
   await dialog.getByText('Arrêter le partage').click()
   await expect(dialog.getByRole('button', { name: 'Enregistrer' })).toBeDisabled()
   await dialog.getByRole('textbox').fill('Prestataire parti en septembre')

@@ -4,6 +4,7 @@ import { createError, type RequestEvent } from 'nuxt/server'
 import { checkItems, controlSessions, notifications, users } from '../db/schema'
 import { recordAudit } from '../utils/audit'
 import type { Database } from '../utils/db'
+import { DEFAULT_EMAIL_MESSAGE, defaultEmailSubject, messageParagraphs, pendingSentence } from '../../shared/emails'
 import type { Actor } from './checks'
 
 export interface MailMessage {
@@ -62,16 +63,24 @@ export function listNotifications(db: Pick<Database, 'select'>, sessionId: strin
 
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' })[c]!)
 
-export function assignmentEmail(input: { recipientName: string, sessionName: string, pending: number, appUrl: string }): Omit<MailMessage, 'to'> {
-  const plural = input.pending > 1 ? 's' : ''
+export interface EmailContent {
+  subject?: string
+  message?: string
+}
+
+/**
+ * Email d'un valideur : « Bonjour <nom>, », nombre de lignes en attente et lien vers l'application (toujours
+ * ajoutés), puis message de l'admin (texte brut échappé, signature comprise).
+ */
+export function assignmentEmail(input: { recipientName: string, sessionName: string, pending: number, appUrl: string } & EmailContent): Omit<MailMessage, 'to'> {
+  const paragraphs = messageParagraphs(input.message ?? DEFAULT_EMAIL_MESSAGE)
   return {
-    subject: `ControleIT : ${input.pending} vérification${plural} à faire — ${input.sessionName}`,
+    subject: input.subject ?? defaultEmailSubject(input.sessionName),
     html: [
       `<p>Bonjour ${escapeHtml(input.recipientName)},</p>`,
-      `<p>Le service informatique vous a confié <strong>${input.pending} vérification${plural}</strong> dans la campagne de contrôle « ${escapeHtml(input.sessionName)} ».</p>`,
-      '<p>Pour chaque ligne, indiquez si le partage doit être conservé ou arrêté, ou signalez qu\'elle ne vous concerne pas, avec un commentaire.</p>',
-      `<p><a href="${escapeHtml(input.appUrl)}">Accéder à mes vérifications</a></p>`,
-      '<p>Merci,<br>Le service informatique</p>'
+      `<p><strong>${escapeHtml(pendingSentence(input.pending, input.sessionName))}</strong><br>`
+        + `<a href="${escapeHtml(input.appUrl)}">Accéder à mes vérifications</a></p>`,
+      ...paragraphs.map(lines => `<p>${lines.map(escapeHtml).join('<br>')}</p>`)
     ].join('\n')
   }
 }
@@ -85,7 +94,7 @@ export async function sendAssignmentEmails(
   actor: Actor,
   sessionId: string,
   recipientIds: string[],
-  deps: { mailer: Mailer, appUrl: string },
+  deps: { mailer: Mailer, appUrl: string, content?: EmailContent },
   event?: RequestEvent
 ) {
   const [session] = await db.select({ name: controlSessions.name, status: controlSessions.status }).from(controlSessions).where(eq(controlSessions.id, sessionId))
@@ -110,7 +119,7 @@ export async function sendAssignmentEmails(
     let error: string | null = null
     try {
       if (!recipient.address) throw new Error('Adresse email inconnue')
-      await deps.mailer({ to: recipient.address, ...assignmentEmail({ recipientName: recipient.displayName, sessionName: session.name, pending: recipient.pending, appUrl: deps.appUrl }) })
+      await deps.mailer({ to: recipient.address, ...assignmentEmail({ recipientName: recipient.displayName, sessionName: session.name, pending: recipient.pending, appUrl: deps.appUrl, ...deps.content }) })
     } catch (e) {
       status = 'failed'
       error = e instanceof Error ? e.message : 'erreur inconnue'

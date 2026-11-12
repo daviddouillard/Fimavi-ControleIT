@@ -30,7 +30,10 @@ export const remediationDoneSchema = z.object({
 })
 
 export const notifySchema = z.object({
-  recipientIds: z.array(z.uuid()).min(1).max(100).transform(ids => [...new Set(ids)])
+  recipientIds: z.array(z.uuid()).min(1).max(100).transform(ids => [...new Set(ids)]),
+  /** Objet et message modifiables par l'admin (texte brut, échappé à l'envoi). Absents : textes par défaut. */
+  subject: z.string().trim().min(1, 'L\'objet est obligatoire').max(200).refine(v => !/[\r\n]/.test(v), 'Objet sur une seule ligne').optional(),
+  message: z.string().trim().min(1, 'Le message est obligatoire').max(5000).optional()
 })
 
 export const userSearchSchema = z.object({
