@@ -63,19 +63,18 @@ L'application ne peut envoyer **que** depuis `helpdesk@fimavi.com`. Les destinat
 
 La connexion se fait uniquement avec un compte Microsoft (Entra ID). Il n'y a ni compte local ni mot de passe propre à l'application.
 
+**Règle retenue (2026-11-12)** : « Mes vérifications » est ouvert à **tout le monde sur les domaines internes du groupe** (Paramètres → Domaines internes). L'adresse email ou l'identifiant de connexion du compte doit appartenir à l'un de ces domaines ou à l'un de leurs sous-domaines. Cette règle s'ajoute à celle des tenants.
+
 | Population | Accès | Valider |
 |---|---|---|
-| Comptes du **tenant principal Fimavi** (actifs) | Connexion possible, profil Utilisateur par défaut | ☐ |
-| Comptes des **tenants filiales raccordés et actifs** (Paramètres → Tenants) | Connexion possible, profil Utilisateur uniquement (jamais administrateur) | ☐ |
+| Compte actif d'un **domaine interne**, dans le tenant Fimavi ou un tenant filiale raccordé et actif | Connexion possible, profil Utilisateur | ☐ |
+| Compte d'un domaine **hors de la liste** (invités, prestataires, gmail…) | Refusé, avec le message « compte n'appartenant pas à un domaine du groupe » | ☐ |
+| Membre du groupe administrateur (§4.2) | Toujours accepté, même avec un compte `@…onmicrosoft.com`, pour pouvoir paramétrer les domaines | ☐ |
 | Comptes d'un tenant non raccordé, ou d'un tenant désactivé | Refusés | ☐ |
 | Compte désactivé dans Entra (constaté à la synchronisation de l'annuaire) | Refusé, y compris en cours de session | ☐ |
-| Invités B2B présents dans le tenant Fimavi | En général, ils se connectent depuis leur propre tenant, qui n'est pas raccordé : ils sont alors refusés. Si un invité obtient l'accès, il n'est qu'Utilisateur et ne voit rien tant qu'aucune ligne ne lui est assignée. Comportement à confirmer par un test | ☐ |
 
-**Point à décider (Entra → Applications d'entreprise → ControleIT → Propriétés → « Affectation requise »)** :
-- **Non**, réglage actuel supposé : tout collaborateur peut se connecter. C'est nécessaire, car n'importe quel N+1 peut devenir valideur. Sans ligne assignée, l'écran est vide.
-- **Oui** : seuls les utilisateurs ou groupes affectés à l'application peuvent se connecter. Il faut alors affecter un groupe qui contient tous les valideurs potentiels, dans chaque tenant.
-
-☐ Choix retenu : ……
+**Entra → Applications d'entreprise → ControleIT → Propriétés → « Affectation requise »** :
+laisser à **Non**. Le filtrage par domaine est fait par ControleIT, et n'importe quel collaborateur doit pouvoir devenir valideur. Un retrait de domaine prend effet à la connexion suivante, donc au plus tard 1 heure après.
 
 ### 4.2 Profils
 
