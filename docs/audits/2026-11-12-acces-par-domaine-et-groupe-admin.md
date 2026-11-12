@@ -6,7 +6,7 @@
   - Cette règle s'ajoute à la règle existante sur les tenants (tenant principal ou tenant filiale raccordé et actif).
   - En cas de refus, l'écran de connexion affiche un message explicite (`/login?error=domain`).
 - **Administrateurs** : ils sont toujours acceptés, même avec un compte `onmicrosoft.com`, afin de pouvoir paramétrer les domaines. Seuls les comptes du tenant principal ayant le rôle d'application admin le sont.
-- **Gestion des administrateurs** : par le groupe Entra `gcp-control-IT-admin`, affecté au rôle d'application. Configuration Entra uniquement, sans changement de code.
+- **Gestion des administrateurs** : par le groupe Entra `GCP-FIMAVI-ControlIT-Admin`, affecté au rôle d'application. Configuration Entra uniquement, sans changement de code.
 
 ## Revue de sécurité
 

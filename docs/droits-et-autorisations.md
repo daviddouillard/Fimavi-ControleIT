@@ -80,10 +80,10 @@ laisser à **Non**. Le filtrage par domaine est fait par ControleIT, et n'import
 
 | Profil | Comment l'obtenir | Valider |
 |---|---|---|
-| **Administrateur IT** (Tableau de bord, sessions, Historique, Paramètres) | Membre du groupe Entra **`gcp-control-IT-admin`** du tenant principal. Ce groupe est affecté au rôle d'application défini par `NUXT_ADMIN_ROLE` (Entra → Applications d'entreprise → ControleIT → Utilisateurs et groupes) | ☐ Membres du groupe : …… |
+| **Administrateur IT** (Tableau de bord, sessions, Historique, Paramètres) | Membre du groupe Entra **`GCP-FIMAVI-ControlIT-Admin`** du tenant principal. Ce groupe est affecté au rôle d'application défini par `NUXT_ADMIN_ROLE` (Entra → Applications d'entreprise → ControleIT → Utilisateurs et groupes) | ☐ Membres du groupe : …… |
 | **Utilisateur (valideur)** (Mes vérifications) | Tout autre compte d'un domaine interne (§4.1) | ☐ |
 
-La gestion des administrateurs se fait **uniquement par le groupe** : ajouter ou retirer une personne de `gcp-control-IT-admin`. Aucune personne n'est affectée directement au rôle.
+La gestion des administrateurs se fait **uniquement par le groupe** : ajouter ou retirer une personne de `GCP-FIMAVI-ControlIT-Admin`. Aucune personne n'est affectée directement au rôle.
 
 - Il n'y a qu'un seul rôle administrateur, sans rôle en lecture seule.
 - Un ajout ou un retrait du rôle prend effet à la connexion suivante, donc au plus tard 1 heure après : c'est la durée d'une session.
