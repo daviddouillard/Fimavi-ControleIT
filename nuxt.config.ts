@@ -2,6 +2,12 @@
 // Aucun secret ici : toutes les valeurs sensibles sont surchargées par les variables NUXT_* (voir .env.example).
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
+
+  // Après un déploiement, un onglet resté ouvert réclame des fichiers de l'ancienne version, qui n'existent
+  // plus : la page est rechargée aussitôt au lieu d'afficher une erreur 500.
+  experimental: {
+    emitRouteChunkError: 'automatic-immediate'
+  },
   devtools: { enabled: true },
 
   modules: ['@nuxt/ui', 'nuxt-auth-utils', 'nuxt-security'],

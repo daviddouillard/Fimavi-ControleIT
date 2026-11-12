@@ -77,4 +77,6 @@ Revue de sécurité :
 - **Contenu** : même gabarit échappé que pour les valideurs.
 - **Traçabilité** : chaque envoi est historisé (0 ligne) et l'audit liste les personnes ajoutées à la main (`addedByHand`).
 
+Rechargement automatique après déploiement : un onglet ouvert sur l'ancienne version affichait une erreur 500 (« Failed to fetch dynamically imported module »). La page est désormais rechargée aussitôt (`experimental.emitRouteChunkError: 'automatic-immediate'`). Ce changement est sans effet sur la sécurité.
+
 TNR : typecheck OK ; `npm run test` 81/81 (envoi à une personne ajoutée, compte désactivé ignoré, au moins un destinataire exigé) ; `npm run test:e2e` 23/23 (ajout de « Marc Manager » par recherche, envoi à 2 destinataires).
