@@ -18,8 +18,34 @@ const graphUserSchema = z.object({
 export type GraphUser = z.infer<typeof graphUserSchema>
 
 export class GraphError extends Error {
-  constructor(public readonly status: number, message: string) {
+  /**
+   * @param code code d'erreur Microsoft, sans donnée sensible : « AADSTS… » pour un jeton refusé,
+   *   code Graph (ex. « accessDenied ») pour un appel refusé.
+   */
+  constructor(public readonly status: number, message: string, public readonly code: string | null = null) {
     super(message)
+  }
+}
+
+/** Jeton applicatif refusé par Entra pour un tenant (ID inconnu, application non consentie, secret invalide…). */
+export class TokenError extends GraphError {}
+
+const tokenErrorSchema = z.object({ error_codes: z.array(z.number()).optional(), error: z.string().optional() }).loose()
+const graphErrorSchema = z.object({ error: z.object({ code: z.string().optional() }).loose().optional() }).loose()
+
+/** Code d'erreur lisible d'une réponse en échec ; le corps complet n'est jamais conservé (il peut citer des données). */
+async function errorCode(res: Response, kind: 'token' | 'graph'): Promise<string | null> {
+  try {
+    const body = await res.json() as unknown
+    if (kind === 'token') {
+      const parsed = tokenErrorSchema.safeParse(body)
+      const code = parsed.success ? parsed.data.error_codes?.[0] : undefined
+      return code ? `AADSTS${code}` : parsed.success ? parsed.data.error ?? null : null
+    }
+    const parsed = graphErrorSchema.safeParse(body)
+    return parsed.success ? parsed.data.error?.code ?? null : null
+  } catch {
+    return null
   }
 }
 
@@ -57,7 +83,10 @@ async function getAppToken(tenant: string): Promise<string> {
       scope: 'https://graph.microsoft.com/.default'
     })
   })
-  if (!res.ok) throw new GraphError(res.status, `Jeton Graph refusé pour le tenant (${res.status}) : consentement administrateur manquant ?`)
+  if (!res.ok) {
+    const code = await errorCode(res, 'token')
+    throw new TokenError(res.status, `Jeton Graph refusé pour le tenant (${res.status}${code ? `, ${code}` : ''}) : ID de tenant ou consentement administrateur à vérifier`, code)
+  }
   const token = tokenSchema.parse(await res.json())
   tokens.set(tenant, { value: token.access_token, expiresAt: Date.now() + token.expires_in * 1000 })
   return token.access_token
@@ -88,7 +117,8 @@ export function graphClient(tenant: string, fetchImpl: typeof fetch = fetch): Gr
         await sleep(retryDelay(res, attempt))
         continue
       }
-      throw new GraphError(res.status, `Appel Graph en échec (${res.status})`)
+      const code = await errorCode(res, 'graph')
+      throw new GraphError(res.status, `Appel Graph en échec (${res.status}${code ? `, ${code}` : ''})`, code)
     }
   }
 

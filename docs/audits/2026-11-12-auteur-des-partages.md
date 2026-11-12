@@ -47,6 +47,14 @@ Aucun constat ouvert.
 - La recherche d'audit prend plusieurs minutes côté Microsoft, ce qui allonge la collecte d'autant.
 - Les noms des champs détaillés de l'audit ne sont pas documentés de façon stable. Le rapprochement « sûr » recherche donc l'adresse du bénéficiaire dans tout le contenu de l'événement. À vérifier sur une vraie collecte, puis ajuster si besoin.
 
+## Complément : message précis du bouton « Tester » (raccordement d'un tenant filiale)
+
+- Un jeton refusé par Entra est désormais distingué d'un site refusé par SharePoint :
+  - jeton refusé : le message donne le code `AADSTS…` et sa cause (ID de tenant introuvable, application non consentie dans le tenant, secret expiré, accès conditionnel) ;
+  - site refusé : le message donne le statut HTTP et le code Graph (ex. `accessDenied`).
+- Le message est aussi écrit dans les journaux du serveur.
+- **Sécurité** : seuls le code d'erreur Microsoft et le statut sont conservés, jamais le corps de la réponse, le jeton ou le secret. Tests unitaires `tests/unit/graph-diagnostics.test.ts`.
+
 ## TNR
 
 - `npm run typecheck` : OK
