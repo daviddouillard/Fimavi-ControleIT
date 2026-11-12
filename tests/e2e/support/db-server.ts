@@ -30,7 +30,9 @@ await db.insert(schema.checkItems).values(IDS.items.map((id, i) => ({
     resourceUrl: `https://fimavi.sharepoint.com/sites/projets/Projet${i + 1}`,
     beneficiary: `invite${i + 1}@externe.test`,
     access: 'Accès direct',
-    role: 'Lecture'
+    role: 'Lecture',
+    // Auteur trouvé dans le journal d'audit et N+1 suggéré (lignes 1 à 3).
+    ...(i < 3 ? { sharedBy: 'jean.auteur@fimavi.test', sharedAt: '2026-10-01T08:00:00Z', sharedByCertain: 'yes', suggestedValidatorId: IDS.validator, suggestedValidatorName: 'Valérie Valideuse' } : {})
   }
 })))
 

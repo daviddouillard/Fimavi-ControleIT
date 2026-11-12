@@ -122,6 +122,29 @@ export async function runCollection(db: Database, runId: string, module: Control
     checkpoint()
   }
 
+  async function annotateLines(patches: { dedupKey: string, data: Record<string, string> }[]) {
+    checkpoint()
+    for (let i = 0; i < patches.length; i += 200) {
+      const batch = patches.slice(i, i + 200)
+      await db.transaction(async (tx) => {
+        // Mêmes verrous et conditions que l'ajout : rien n'est modifié hors brouillon ni par une collecte interrompue.
+        const [current] = await tx.select({ status: controlSessions.status }).from(controlSessions)
+          .where(eq(controlSessions.id, session!.id)).for('share')
+        const [self] = await tx.select({ status: collectionRuns.status }).from(collectionRuns)
+          .where(eq(collectionRuns.id, runId)).for('update')
+        if (current?.status !== 'draft') throw new CollectionStopped('Collecte arrêtée : la session n\'est plus en brouillon')
+        if (self?.status !== 'running') throw new CollectionStopped('Collecte arrêtée : exécution interrompue')
+        for (const patch of batch) {
+          await tx.update(checkItems)
+            .set({ data: sql`${checkItems.data} || ${JSON.stringify(patch.data)}::jsonb` })
+            .where(and(eq(checkItems.sessionId, session!.id), eq(checkItems.dedupKey, patch.dedupKey)))
+        }
+      })
+    }
+    await save()
+    checkpoint()
+  }
+
   // Signe de vie régulier, même pendant une longue étape sans avancement visible (permissions, attente Graph).
   const heartbeat = setInterval(() => {
     save().catch(error => console.error('Collecte : signe de vie non enregistré :', error instanceof Error ? error.message : 'erreur inconnue'))
@@ -133,6 +156,7 @@ export async function runCollection(db: Database, runId: string, module: Control
       config: session.config,
       internalDomains: new Set(await listDomains(db)),
       addLines,
+      annotateLines,
       progress: async (state) => {
         Object.assign(report, state)
         await save()

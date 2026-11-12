@@ -30,7 +30,7 @@ const choice = computed(() => choiceOf(form.decision))
 const canSubmit = computed(() => responseSchema.safeParse({ decision: form.decision, comment: form.comment }).success)
 
 /** Informations complémentaires de la ligne (la ressource et le bénéficiaire sont affichés à part). */
-const DETAIL_ICONS: Record<string, string> = { Tenant: 'i-lucide-building-2', Site: 'i-lucide-globe', Expiration: 'i-lucide-calendar-clock' }
+const DETAIL_ICONS: Record<string, string> = { 'Tenant': 'i-lucide-building-2', 'Site': 'i-lucide-globe', 'Expiration': 'i-lucide-calendar-clock', 'Partagé par': 'i-lucide-user-pen' }
 const details = computed(() => current.value ? itemFields(current.value.data).filter(f => f.label in DETAIL_ICONS) : [])
 
 function openResponse(check: Check) {

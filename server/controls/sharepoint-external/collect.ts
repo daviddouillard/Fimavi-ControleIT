@@ -62,6 +62,14 @@ export function sitePath(url: string): string {
   return path ? `sites/${hostname}:${path.split('/').map(encodeURIComponent).join('/')}` : `sites/${hostname}`
 }
 
+function safeDecode(url: string): string {
+  try {
+    return decodeURI(url)
+  } catch {
+    return url
+  }
+}
+
 /** Exécute les tâches avec un parallélisme limité (respect du throttling Graph). */
 async function pool<T>(items: T[], size: number, task: (item: T) => Promise<void>) {
   let next = 0
@@ -124,6 +132,7 @@ export async function collectSiteShares(
 
   for (const drive of drives) {
     const driveName = drive.name ?? 'Documents'
+    const driveBaseUrl = safeDecode(drive.webUrl ?? '').replace(/\/+$/, '')
     const items = new Map<string, DriveItem>()
     const select = 'id,name,webUrl,parentReference,folder,root,shared,deleted'
     for await (const page of graph.list(`drives/${encodeURIComponent(drive.id)}/root/delta?$select=${select}`, { headers: { Prefer: 'hierarchicalsharing' } })) {
@@ -183,6 +192,8 @@ export async function collectSiteShares(
       const inherited = new Set((ancestor ? grantsByItem.get(ancestor.id) ?? [] : []).map(g => `${g.beneficiaryKey}|${g.role}`))
       const resourceType = item.root ? 'Bibliothèque' : item.folder ? 'Dossier' : 'Fichier'
       const resourcePath = path(item)
+      // Adresse complète de l'élément, au format du journal d'audit (auteur du partage).
+      const objectUrl = [driveBaseUrl, ...resourcePath.split(' / ').slice(1)].join('/')
       for (const grant of grantsByItem.get(item.id) ?? []) {
         if (inherited.has(`${grant.beneficiaryKey}|${grant.role}`)) continue
         const dedupKey = ['sp', target.tenantId, drive.id, item.id, grant.beneficiaryKey, grant.role].join('|')
@@ -196,6 +207,7 @@ export async function collectSiteShares(
             resourceType,
             resource: resourcePath,
             resourceUrl: item.webUrl ?? drive.webUrl ?? '',
+            objectUrl: driveBaseUrl ? objectUrl : '',
             beneficiary: grant.beneficiary,
             beneficiaryEmail: grant.email ?? '',
             access: ACCESS_LABELS[grant.access],

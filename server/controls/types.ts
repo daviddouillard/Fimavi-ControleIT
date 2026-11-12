@@ -13,6 +13,8 @@ export interface CollectionContext {
   config: Record<string, unknown>
   internalDomains: ReadonlySet<string>
   addLines: (lines: ControlLine[]) => Promise<void>
+  /** Complète les données de lignes déjà ajoutées (ex. auteur du partage), identifiées par leur clé. */
+  annotateLines: (patches: { dedupKey: string, data: Record<string, string> }[]) => Promise<void>
   progress: (state: Record<string, unknown>) => Promise<void>
   siteError: (source: string, message: string) => Promise<void>
 }

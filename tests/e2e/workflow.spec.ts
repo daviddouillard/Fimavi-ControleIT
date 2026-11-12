@@ -32,13 +32,18 @@ test('l\'admin assigne plusieurs lignes, en clôture une sans validation et ouvr
 
   // Attendre l'hydratation : un clic avant est perdu.
   await page.waitForLoadState('networkidle')
+  // Auteur du partage (journal d'audit) et N+1 suggéré affichés sur la ligne.
+  await expect(page.getByText('jean.auteur@fimavi.test').first()).toBeVisible()
+  await expect(page.getByText('Valérie Valideuse').first()).toBeVisible()
+
   for (const n of [1, 2, 3]) await rowCheckbox(page, n).click()
   await expect(page.getByText('3 ligne(s) sélectionnée(s)')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Assigner au N+1 suggéré (3)' })).toBeVisible()
 
   await page.getByRole('button', { name: /Rechercher un valideur/ }).click()
   await page.keyboard.type('va')
   await page.getByRole('option', { name: 'Valérie Valideuse' }).click()
-  await page.getByRole('button', { name: 'Assigner' }).click()
+  await page.getByRole('button', { name: 'Assigner', exact: true }).click()
   await expect(page.getByText('3 ligne(s) assignée(s)').first()).toBeVisible()
 
   // Le bouton d'email reste cliquable en brouillon : la fenêtre explique pourquoi l'envoi est bloqué.
@@ -103,9 +108,15 @@ test('le valideur répond : commentaire toujours obligatoire, trois choix possib
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'À faire (3)' })).toBeVisible()
 
+  // La suggestion de valideur reste réservée à l'IT : elle n'est pas transmise au valideur.
+  const mine = await (await page.request.get('/api/me/checks')).json() as { data: Record<string, string> }[]
+  expect(mine[0]!.data.sharedBy).toBe('jean.auteur@fimavi.test')
+  expect(mine.some(c => 'suggestedValidatorId' in c.data || 'suggestedValidatorName' in c.data)).toBe(false)
+
   await page.getByRole('button', { name: 'Répondre' }).first().click()
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByText('Projet 1', { exact: true })).toBeVisible()
+  await expect(dialog.getByText('jean.auteur@fimavi.test')).toBeVisible()
   await dialog.getByText('Arrêter le partage').click()
   await expect(dialog.getByRole('button', { name: 'Enregistrer' })).toBeDisabled()
   await dialog.getByRole('textbox').fill('Prestataire parti en septembre')
@@ -137,7 +148,7 @@ test('l\'admin voit la ligne à réattribuer avec le commentaire et la confie au
   await page.getByRole('button', { name: /Rechercher un valideur/ }).click()
   await page.keyboard.type('Marc')
   await page.getByRole('option', { name: 'Marc Manager' }).click()
-  await page.getByRole('button', { name: 'Assigner' }).click()
+  await page.getByRole('button', { name: 'Assigner', exact: true }).click()
   await expect(page.getByText('1 ligne(s) assignée(s)').first()).toBeVisible()
 
   await as(page, baseURL, 'otherValidator')

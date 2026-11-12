@@ -31,7 +31,8 @@ export interface GraphClient {
    * Les en-têtes éventuels (ex. Prefer) sont renvoyés à chaque page.
    */
   list: (pathOrUrl: string, options?: { headers?: Record<string, string> }) => AsyncGenerator<unknown[]>
-  post: (path: string, body: unknown) => Promise<void>
+  /** Corps JSON de la réponse, ou null si elle est vide (ex. 202 de sendMail). */
+  post: (path: string, body: unknown) => Promise<unknown>
 }
 
 const tokens = new Map<string, { value: string, expiresAt: number }>()
@@ -107,7 +108,9 @@ export function graphClient(tenant: string, fetchImpl: typeof fetch = fetch): Gr
       }
     },
     async post(path, body) {
-      await request(absolute(path), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const res = await request(absolute(path), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const text = await res.text()
+      return text ? JSON.parse(text) as unknown : null
     }
   }
 }

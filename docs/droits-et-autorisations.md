@@ -14,6 +14,7 @@ Une seule inscription d'application, **multi-locataire** :
 | `User.Read.All` | Application | Synchronisation de l'annuaire de chaque tenant (nom, email, service, compte actif) : choix des valideurs | ☐ |
 | `Sites.Read.All` | Application | Lecture des sites SharePoint (bibliothèques, éléments, partages) | ☐ |
 | `Sites.Selected` | Application | Porte le **contrôle total site par site** (voir §2) | ☐ |
+| `AuditLogsQuery-SharePoint.Read.All` | Application | Lecture du journal d'audit **SharePoint uniquement** : retrouver qui a créé chaque partage (180 jours) | ☐ |
 
 **Non accordé, volontairement :**
 - `Mail.Send` dans Entra : il permettrait d'envoyer depuis n'importe quelle boîte. L'envoi est limité par Exchange (voir §3).

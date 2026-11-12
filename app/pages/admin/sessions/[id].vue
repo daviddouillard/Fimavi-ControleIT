@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
+import ShareAuthor from '~/components/ShareAuthor.vue'
 import ShareBeneficiary from '~/components/ShareBeneficiary.vue'
 import ShareResource from '~/components/ShareResource.vue'
 import { DEFAULT_EMAIL_MESSAGE, defaultEmailSubject, messageParagraphs, pendingSentence } from '#shared/emails'
@@ -73,11 +74,11 @@ const matchesState = (item: Item) => {
   }
 }
 const inList = (selected: string[], value: string | null | undefined) => !selected.length || selected.includes(value ?? '')
-const searchText = (item: Item) => [item.label, item.data.resource, item.data.beneficiary, item.data.site, item.assigneeName, item.comment]
+const searchText = (item: Item) => [item.label, item.data.resource, item.data.beneficiary, item.data.site, item.data.sharedBy, item.data.suggestedValidatorName, item.assigneeName, item.comment]
   .filter(Boolean).join(' ').toLocaleLowerCase('fr')
 
 // Tri par colonne (clic sur l'en-tête : croissant, puis décroissant).
-type SortKey = 'rowNumber' | 'site' | 'resource' | 'beneficiary' | 'assignee' | 'state' | 'remediation'
+type SortKey = 'rowNumber' | 'site' | 'resource' | 'beneficiary' | 'author' | 'assignee' | 'state' | 'remediation'
 const sort = ref<{ key: SortKey, desc: boolean }>({ key: 'rowNumber', desc: false })
 const resourceName = (item: Item) => (item.data.resource ?? item.label).split(' / ').at(-1) ?? ''
 const sortValue: Record<SortKey, (item: Item) => string | number> = {
@@ -85,6 +86,7 @@ const sortValue: Record<SortKey, (item: Item) => string | number> = {
   site: i => i.data.site ?? '',
   resource: resourceName,
   beneficiary: i => i.data.beneficiary ?? '',
+  author: i => i.data.sharedBy ?? '￿',
   assignee: i => i.assigneeName ?? '',
   state: i => itemState(i).label,
   remediation: i => i.remediationStatus ?? ''
@@ -176,6 +178,11 @@ const columns: TableColumn<Item>[] = [
     header: sortHeader('Bénéficiaire', 'beneficiary'),
     cell: ({ row }) => h('div', { class: 'min-w-56 max-w-xs 2xl:max-w-sm' }, [h(ShareBeneficiary, { data: row.original.data })])
   },
+  {
+    id: 'author',
+    header: sortHeader('Partagé par', 'author'),
+    cell: ({ row }) => h('div', { class: 'min-w-44 max-w-xs' }, [h(ShareAuthor, { data: row.original.data })])
+  },
   { accessorKey: 'assigneeName', header: sortHeader('Valideur', 'assignee'), cell: ({ row }) => h('span', { class: 'block min-w-32' }, row.original.assigneeName ?? '—') },
   {
     id: 'state',
@@ -230,6 +237,27 @@ function assign() {
   })
 }
 
+// Assignation au N+1 de l'auteur du partage (suggestion issue du journal d'audit) : l'admin choisit les lignes.
+const suggestedGroups = computed(() => {
+  const groups = new Map<string, string[]>()
+  for (const itemId of selectedIds.value) {
+    const suggested = data.value?.items.find(i => i.id === itemId)?.data.suggestedValidatorId
+    if (suggested) groups.set(suggested, [...(groups.get(suggested) ?? []), itemId])
+  }
+  return groups
+})
+const suggestedCount = computed(() => [...suggestedGroups.value.values()].reduce((n, ids) => n + ids.length, 0))
+function assignSuggested() {
+  const groups = [...suggestedGroups.value]
+  return act(async () => {
+    let assigned = 0
+    for (const [assigneeId, itemIds] of groups) {
+      assigned += (await $fetch(`/api/admin/sessions/${id.value}/assign`, { method: 'POST', body: { itemIds, assigneeId } })).assigned
+    }
+    return `${assigned} ligne(s) assignée(s) au N+1 suggéré`
+  })
+}
+
 const confirmClose = ref(false)
 function closeItems() {
   confirmClose.value = false
@@ -254,7 +282,7 @@ const unanswered = computed(() => (data.value?.items ?? []).filter(isPending).le
 
 // Collecte des partages (en arrière-plan côté serveur) : avancement interrogé toutes les 3 secondes.
 type Run = NonNullable<NonNullable<typeof data.value>['run']>
-interface Progress { added?: number, duplicates?: number, sitesDone?: number, sitesTotal?: number, itemsScanned?: number, permissionsChecked?: number, permissionsTotal?: number, site?: string, errors?: { source: string, message: string }[] }
+interface Progress { authors?: 'running' | 'done' | 'failed', authorsFound?: number, added?: number, duplicates?: number, sitesDone?: number, sitesTotal?: number, itemsScanned?: number, permissionsChecked?: number, permissionsTotal?: number, site?: string, errors?: { source: string, message: string }[] }
 const run = ref<Run | null>(null)
 watch(() => data.value?.run, (value) => { run.value = value ?? null }, { immediate: true })
 const progress = computed(() => (run.value?.progress ?? {}) as Progress)
@@ -380,11 +408,12 @@ function sendEmails() {
           <span v-if="progress.site" class="text-muted break-all">({{ progress.site }})</span>
           · {{ progress.itemsScanned ?? 0 }} éléments parcourus
           <template v-if="progress.permissionsTotal">· partages analysés {{ progress.permissionsChecked ?? 0 }}/{{ progress.permissionsTotal }}</template>
+          <template v-if="progress.authors === 'running'">· recherche des auteurs dans le journal d'audit Microsoft 365…</template>
           · {{ progress.added ?? 0 }} ligne(s) ajoutée(s)<template v-if="progress.duplicates">, {{ progress.duplicates }} déjà présente(s)</template>
         </p>
         <p v-else-if="run.status === 'succeeded'">
           Terminée le {{ formatDateTime(run.finishedAt) }} : {{ progress.added ?? 0 }} ligne(s) ajoutée(s),
-          {{ progress.duplicates ?? 0 }} doublon(s) écarté(s).
+          {{ progress.duplicates ?? 0 }} doublon(s) écarté(s)<template v-if="progress.authors === 'done'">, auteur trouvé pour {{ progress.authorsFound ?? 0 }} ligne(s)</template>.
         </p>
         <p v-else class="text-error">Échec de la collecte : {{ run.error }}</p>
         <ul v-if="progress.errors?.length" class="text-error">
@@ -433,6 +462,15 @@ function sendEmails() {
           class="w-72"
         />
         <UButton :disabled="!assignee" :loading="busy" icon="i-lucide-user-check" @click="assign">Assigner</UButton>
+        <UButton
+          v-if="suggestedCount"
+          variant="soft"
+          :loading="busy"
+          icon="i-lucide-user-round-check"
+          @click="assignSuggested"
+        >
+          Assigner au N+1 suggéré ({{ suggestedCount }})
+        </UButton>
         <UButton color="neutral" variant="outline" :loading="busy" icon="i-lucide-circle-check" @click="confirmClose = true">
           Clôturer sans validation
         </UButton>

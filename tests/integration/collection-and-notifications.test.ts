@@ -1,5 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { normalizeObjectUrl } from '../../server/controls/sharepoint-external/authors'
+import { authorPatches } from '../../server/controls/sharepoint-external/index'
 import type { ControlModule } from '../../server/controls/types'
 import { auditLog, checkItems, collectionRuns, controlSessions, notifications, remediations, users } from '../../server/db/schema'
 import { assignItems, markRemediationDone, respondToCheck, setSessionStatus } from '../../server/services/checks'
@@ -213,6 +215,42 @@ describe('collecte', () => {
     const run = await startCollection(db, s.admin, s.session.id)
     await db.update(collectionRuns).set({ heartbeatAt: new Date(Date.now() - 10 * 60 * 1000 - 1000) }).where(eq(collectionRuns.id, run.id))
     expect(await latestRun(db, s.session.id)).toMatchObject({ status: 'failed', error: 'Collecte interrompue' })
+  })
+})
+
+describe('auteur des partages', () => {
+  it('complète les lignes avec l\'auteur et propose son N+1 de l\'annuaire comme valideur', async () => {
+    const s = await seedSession(db, 'draft')
+    await saveDomains(db, s.admin, ['fimavi.com'])
+    const [manager] = await db.insert(users).values({ tenantId: TEST_TENANT, entraId: `mgr-${crypto.randomUUID()}`, displayName: 'Marie Manager', mail: 'marie@fimavi.test' }).returning()
+    const objectUrl = 'https://fimavi.sharepoint.com/sites/TSI/Documents/Devis.xlsx'
+    const lines = [
+      { dedupKey: 'a1', label: 'Devis', data: { objectUrl, beneficiaryEmail: 'invite@client.fr', access: 'Accès direct' } },
+      { dedupKey: 'a2', label: 'Autre', data: { objectUrl: 'https://fimavi.sharepoint.com/sites/TSI/Documents/Autre.xlsx', beneficiaryEmail: 'x@client.fr', access: 'Accès direct' } }
+    ]
+    const graph = {
+      get: async () => ({ id: manager!.entraId, displayName: 'Marie Manager' }),
+      async* list() { yield [] },
+      post: async () => null
+    }
+    const patches = await authorPatches(db, graph, TEST_TENANT, lines, [
+      { objectUrl: normalizeObjectUrl(objectUrl), operation: 'SharingInvitationCreated', author: 'jean@fimavi.com', createdAt: '2026-10-01T00:00:00Z', text: 'invite@client.fr' }
+    ])
+    expect(patches).toEqual([{ dedupKey: 'a1', data: {
+      sharedBy: 'jean@fimavi.com', sharedAt: '2026-10-01T00:00:00Z', sharedByCertain: 'yes',
+      suggestedValidatorId: manager!.id, suggestedValidatorName: 'Marie Manager'
+    } }])
+
+    // Les données sont fusionnées dans la ligne déjà collectée, sans écraser le reste.
+    const run = await startCollection(db, s.admin, s.session.id)
+    await runCollection(db, run.id, {
+      async collect(ctx) {
+        await ctx.addLines(lines)
+        await ctx.annotateLines(patches)
+      }
+    })
+    const [row] = await db.select().from(checkItems).where(and(eq(checkItems.sessionId, s.session.id), eq(checkItems.dedupKey, 'a1')))
+    expect(row!.data).toMatchObject({ objectUrl, beneficiaryEmail: 'invite@client.fr', sharedBy: 'jean@fimavi.com', suggestedValidatorId: manager!.id })
   })
 })
 

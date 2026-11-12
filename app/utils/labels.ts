@@ -44,7 +44,8 @@ const ITEM_FIELDS: [key: string, label: string][] = [
   ['beneficiary', 'Bénéficiaire'],
   ['access', 'Type de partage'],
   ['role', 'Droit'],
-  ['expiresAt', 'Expiration']
+  ['expiresAt', 'Expiration'],
+  ['sharedBy', 'Partagé par']
 ]
 
 export function itemFields(data: Record<string, string>): { label: string, value: string }[] {
