@@ -57,20 +57,66 @@ L'application ne peut envoyer **que** depuis `helpdesk@fimavi.com`. Les destinat
 - les valideurs de la session qui ont des lignes en attente ;
 - au plus 20 personnes de l'annuaire, ajoutées à la main par un admin.
 
-## 4. Droits dans l'application
+## 4. Utilisateurs de l'application
 
-| Action | Administrateur IT | Utilisateur (valideur) |
+### 4.1 Qui peut se connecter
+
+La connexion se fait uniquement avec un compte Microsoft (Entra ID). Il n'y a ni compte local ni mot de passe propre à l'application.
+
+| Population | Accès | Valider |
 |---|---|---|
-| Tableau de bord, sessions, historique, journal d'audit | ✅ | ❌ |
-| Créer, ouvrir ou clôturer une session ; relancer une collecte | ✅ | ❌ |
-| Assigner des lignes, clôturer une ligne sans validation | ✅ | ❌ |
-| Envoyer les emails aux valideurs | ✅ | ❌ |
-| Marquer une action de retrait « Fait » | ✅ | ❌ |
-| Paramètres (domaines internes, tenants, sites) | ✅ | ❌ |
-| Voir et répondre à **ses** lignes assignées (session ouverte) | ✅ | ✅ |
-| Voir les lignes d'un autre valideur | ✅ | ❌ |
+| Comptes du **tenant principal Fimavi** (actifs) | Connexion possible, profil Utilisateur par défaut | ☐ |
+| Comptes des **tenants filiales raccordés et actifs** (Paramètres → Tenants) | Connexion possible, profil Utilisateur uniquement (jamais administrateur) | ☐ |
+| Comptes d'un tenant non raccordé, ou d'un tenant désactivé | Refusés | ☐ |
+| Compte désactivé dans Entra (constaté à la synchronisation de l'annuaire) | Refusé, y compris en cours de session | ☐ |
+| Invités B2B présents dans le tenant Fimavi | En général, ils se connectent depuis leur propre tenant, qui n'est pas raccordé : ils sont alors refusés. Si un invité obtient l'accès, il n'est qu'Utilisateur et ne voit rien tant qu'aucune ligne ne lui est assignée. Comportement à confirmer par un test | ☐ |
 
-Toutes les autorisations sont vérifiées côté serveur, à chaque requête. Le compte est revérifié en base à chaque requête : un compte désactivé est refusé. La session dure 1 heure.
+**Point à décider (Entra → Applications d'entreprise → ControleIT → Propriétés → « Affectation requise »)** :
+- **Non**, réglage actuel supposé : tout collaborateur peut se connecter. C'est nécessaire, car n'importe quel N+1 peut devenir valideur. Sans ligne assignée, l'écran est vide.
+- **Oui** : seuls les utilisateurs ou groupes affectés à l'application peuvent se connecter. Il faut alors affecter un groupe qui contient tous les valideurs potentiels, dans chaque tenant.
+
+☐ Choix retenu : ……
+
+### 4.2 Profils
+
+| Profil | Comment l'obtenir | Valider |
+|---|---|---|
+| **Administrateur IT** | Compte du tenant principal, membre du rôle d'application défini par `NUXT_ADMIN_ROLE` (Entra → Applications d'entreprise → ControleIT → Utilisateurs et groupes) | ☐ Liste des membres : …… |
+| **Utilisateur (valideur)** | Tout autre compte autorisé à se connecter (§4.1) | ☐ |
+
+- Il n'y a qu'un seul rôle administrateur, sans rôle en lecture seule.
+- Un ajout ou un retrait du rôle prend effet à la connexion suivante, donc au plus tard 1 heure après : c'est la durée d'une session.
+- Une désactivation de compte prend effet immédiatement.
+
+### 4.3 Fonctionnalités par profil
+
+| Écran | Fonctionnalité | Administrateur IT | Utilisateur |
+|---|---|---|---|
+| **Mes vérifications** | Voir les lignes qui **lui** sont assignées (à faire / déjà répondues) | ✅ | ✅ |
+| | Répondre : valider le partage, l'arrêter, ou signaler une mauvaise attribution (commentaire obligatoire) | ✅ | ✅ |
+| | Changer d'avis tant que la session est ouverte | ✅ | ✅ |
+| | Voir les lignes d'un autre valideur | ❌ | ❌ |
+| **Tableau de bord** | Sessions en cours, avancement, réponses en attente | ✅ | ❌ |
+| | Accès à retirer (pot commun IT), bouton « Fait » | ✅ | ❌ |
+| **Session** | Créer une session (choix des sites) et lancer la collecte des partages | ✅ | ❌ |
+| | Relancer la collecte (session en brouillon) | ✅ | ❌ |
+| | Ouvrir puis clôturer la session | ✅ | ❌ |
+| | Consulter toutes les lignes, avec tris et filtres | ✅ | ❌ |
+| | Assigner des lignes à un valideur (recherche dans l'annuaire) | ✅ | ❌ |
+| | Clôturer une ligne sans validation | ✅ | ❌ |
+| | Préparer et envoyer les emails, relancer, ajouter des destinataires de l'annuaire | ✅ | ❌ |
+| **Historique** | Toutes les sessions, y compris clôturées, et le journal d'audit | ✅ | ❌ |
+| **Paramètres** | Domaines internes du groupe | ✅ | ❌ |
+| | Tenants raccordés (ajout, activation, lien de consentement) | ✅ | ❌ |
+| | Sites SharePoint (ajout, test, activation) | ✅ | ❌ |
+| | Synchronisation de l'annuaire | ✅ | ❌ |
+
+### 4.4 Garanties
+
+- Chaque droit est vérifié **côté serveur, sur chaque requête**, jamais seulement dans l'écran. Un utilisateur qui appelle une adresse d'administration reçoit un refus (403).
+- Un valideur ne peut ni lire ni modifier une ligne qui ne lui est pas assignée : l'appartenance est contrôlée sur chaque ligne.
+- Toutes les actions sont tracées dans le journal d'audit : connexion, assignation, réponse, envoi d'email, clôture, paramètres. Ce journal ne peut être ni modifié ni effacé par l'application.
+- Session de 1 heure ; cookie chiffré, `HttpOnly` et `Secure` ; requêtes d'une autre origine refusées.
 
 ## 5. Google Cloud (projet `fimavi-controleit`)
 
