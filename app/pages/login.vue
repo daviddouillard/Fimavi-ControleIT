@@ -1,6 +1,9 @@
 <script setup lang="ts">
 const route = useRoute()
 const hasError = computed(() => route.query.error !== undefined)
+const errorText = computed(() => route.query.error === 'domain'
+  ? 'Votre compte n\'appartient pas à un domaine du groupe autorisé à utiliser ControleIT. Contactez l\'IT.'
+  : 'La connexion a échoué. Réessayez ou contactez l\'IT.')
 </script>
 
 <template>
@@ -15,7 +18,7 @@ const hasError = computed(() => route.query.error !== undefined)
         v-if="hasError"
         color="error"
         variant="subtle"
-        title="La connexion a échoué. Réessayez ou contactez l'IT."
+        :title="errorText"
         class="mb-4"
       />
 

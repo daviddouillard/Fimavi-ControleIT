@@ -6,6 +6,8 @@ import { useDb } from '../../utils/db'
 import { buildAuthorizationUrl, handleCallback } from '../../utils/entraOidc'
 import { hasRole } from '../../utils/idToken'
 import { claimLegacyUsers, homeTenant } from '../../utils/tenants'
+import { DomainNotAllowed, loginAllowed } from '../../services/access'
+import { listDomains } from '../../services/settings'
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event) as { code?: string, state?: string, error?: string, admin_consent?: string }
@@ -26,6 +28,10 @@ export default defineEventHandler(async (event) => {
     const email = claims.email ?? claims.preferred_username ?? null
     const name = claims.name ?? email ?? claims.oid
 
+    // Seuls les comptes des domaines internes du groupe (et les administrateurs IT) accèdent à l'application.
+    const internalDomains = new Set(await listDomains(useDb()))
+    if (!loginAllowed({ isAdmin, addresses: [claims.email, claims.preferred_username], internalDomains })) throw new DomainNotAllowed()
+
     const user = await useDb().transaction(async (tx) => {
       if (tenantId === home) await claimLegacyUsers(tx, home)
       const [row] = await tx.insert(users)
@@ -45,6 +51,6 @@ export default defineEventHandler(async (event) => {
     return sendRedirect(event, isAdmin ? '/admin' : '/')
   } catch (error) {
     console.error('Échec de connexion Microsoft :', error instanceof Error ? error.message : 'erreur inconnue')
-    return sendRedirect(event, '/login?error=1')
+    return sendRedirect(event, error instanceof DomainNotAllowed ? '/login?error=domain' : '/login?error=1')
   }
 })
