@@ -8,6 +8,7 @@ import type { DirectoryUser } from '~/composables/useDirectorySearch'
 
 const UCheckbox = resolveComponent('UCheckbox')
 const UBadge = resolveComponent('UBadge')
+const UButton = resolveComponent('UButton')
 const toast = useToast()
 
 const route = useRoute()
@@ -32,36 +33,120 @@ function itemState(item: Item): { label: string, color: 'neutral' | 'warning' | 
   return { label: 'Sans valideur', color: 'neutral' }
 }
 
-// Filtre
+// Filtres
 const filters = [
-  { label: 'Toutes', value: 'all' },
+  { label: 'Tous les états', value: 'all' },
   { label: 'Sans valideur', value: 'unassigned' },
   { label: 'À réattribuer', value: 'reassign' },
   { label: 'En attente de réponse', value: 'waiting' },
   { label: 'Répondues', value: 'answered' },
+  { label: 'Partage validé', value: 'keep' },
+  { label: 'Partage à arrêter', value: 'remove' },
   { label: 'Clôturées sans validation', value: 'closed' }
 ] as const
 const filter = ref<(typeof filters)[number]['value']>('all')
-const visibleItems = computed(() => (data.value?.items ?? []).filter((item) => {
+const NO_ASSIGNEE = 'Sans valideur'
+const search = ref('')
+const siteFilter = ref<string[]>([])
+const assigneeFilter = ref<string[]>([])
+const accessFilter = ref<string[]>([])
+const typeFilter = ref<string[]>([])
+
+/** Valeurs distinctes d'un champ, triées, pour les listes de filtres. */
+const distinct = (pick: (item: Item) => string | null | undefined) =>
+  [...new Set((data.value?.items ?? []).map(pick).filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b, 'fr'))
+const siteOptions = computed(() => distinct(i => i.data.site))
+const assigneeOptions = computed(() => [NO_ASSIGNEE, ...distinct(i => i.assigneeName)])
+const accessOptions = computed(() => distinct(i => i.data.access))
+const typeOptions = computed(() => distinct(i => i.data.resourceType))
+
+const matchesState = (item: Item) => {
   switch (filter.value) {
     case 'unassigned': return !item.decision && !item.closedAt && !item.assigneeId
     case 'reassign': return item.decision === 'reassign' && !item.closedAt
     case 'waiting': return !item.decision && !item.closedAt && !!item.assigneeId
     case 'answered': return item.decision === 'keep' || item.decision === 'remove'
+    case 'keep': return item.decision === 'keep'
+    case 'remove': return item.decision === 'remove'
     case 'closed': return !!item.closedAt
     default: return true
   }
-}))
+}
+const inList = (selected: string[], value: string | null | undefined) => !selected.length || selected.includes(value ?? '')
+const searchText = (item: Item) => [item.label, item.data.resource, item.data.beneficiary, item.data.site, item.assigneeName, item.comment]
+  .filter(Boolean).join(' ').toLocaleLowerCase('fr')
+
+// Tri par colonne (clic sur l'en-tête : croissant, puis décroissant).
+type SortKey = 'rowNumber' | 'site' | 'resource' | 'beneficiary' | 'assignee' | 'state' | 'remediation'
+const sort = ref<{ key: SortKey, desc: boolean }>({ key: 'rowNumber', desc: false })
+const resourceName = (item: Item) => (item.data.resource ?? item.label).split(' / ').at(-1) ?? ''
+const sortValue: Record<SortKey, (item: Item) => string | number> = {
+  rowNumber: i => i.rowNumber,
+  site: i => i.data.site ?? '',
+  resource: resourceName,
+  beneficiary: i => i.data.beneficiary ?? '',
+  assignee: i => i.assigneeName ?? '',
+  state: i => itemState(i).label,
+  remediation: i => i.remediationStatus ?? ''
+}
+const collator = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' })
+function toggleSort(key: SortKey) {
+  sort.value = sort.value.key === key ? { key, desc: !sort.value.desc } : { key, desc: false }
+}
+
+const visibleItems = computed(() => {
+  const term = search.value.trim().toLocaleLowerCase('fr')
+  const rows = (data.value?.items ?? []).filter(item => matchesState(item)
+    && inList(siteFilter.value, item.data.site)
+    && inList(assigneeFilter.value, item.assigneeName ?? NO_ASSIGNEE)
+    && inList(accessFilter.value, item.data.access)
+    && inList(typeFilter.value, item.data.resourceType)
+    && (!term || searchText(item).includes(term)))
+  const value = sortValue[sort.value.key]
+  const direction = sort.value.desc ? -1 : 1
+  return rows.sort((a, b) => {
+    const va = value(a)
+    const vb = value(b)
+    const diff = typeof va === 'number' && typeof vb === 'number' ? va - vb : collator.compare(String(va), String(vb))
+    return (diff || a.rowNumber - b.rowNumber) * direction
+  })
+})
+const filtersActive = computed(() => filter.value !== 'all' || !!search.value.trim()
+  || [siteFilter, assigneeFilter, accessFilter, typeFilter].some(f => f.value.length))
+function resetFilters() {
+  filter.value = 'all'
+  search.value = ''
+  siteFilter.value = []
+  assigneeFilter.value = []
+  accessFilter.value = []
+  typeFilter.value = []
+}
 
 // Sélection multiple (seules les lignes en attente sont sélectionnables).
-// Les clés de rowSelection sont les index dans visibleItems : la sélection est vidée à chaque changement de filtre ou rechargement.
+// Les clés de rowSelection sont les index dans visibleItems : la sélection est vidée à chaque changement de filtre,
+// de tri ou rechargement.
 const rowSelection = ref<Record<string, boolean>>({})
 const selectedIds = computed<string[]>(() => Object.entries(rowSelection.value)
   .filter(([, selected]) => selected)
   .map(([index]) => visibleItems.value[Number(index)])
   .filter((item): item is Item => !!item && isPending(item))
   .map(item => item.id))
-watch([filter, data], () => { rowSelection.value = {} })
+watch([filter, data, search, siteFilter, assigneeFilter, accessFilter, typeFilter, sort], () => { rowSelection.value = {} })
+
+/** En-tête cliquable : trie la colonne, flèche selon le sens. */
+const sortHeader = (label: string, key: SortKey) => () => {
+  const active = sort.value.key === key
+  return h(UButton, {
+    'color': 'neutral',
+    'variant': 'ghost',
+    'size': 'xs',
+    'label': label,
+    'class': ['-mx-2 font-semibold', active ? 'text-highlighted' : ''],
+    'trailingIcon': active ? (sort.value.desc ? 'i-lucide-arrow-down' : 'i-lucide-arrow-up') : 'i-lucide-arrow-up-down',
+    'aria-label': `Trier par ${label}`,
+    'onClick': () => toggleSort(key)
+  })
+}
 
 const columns: TableColumn<Item>[] = [
   {
@@ -79,22 +164,22 @@ const columns: TableColumn<Item>[] = [
       'aria-label': 'Sélectionner la ligne'
     })
   },
-  { accessorKey: 'rowNumber', header: '#' },
-  { id: 'site', header: 'Site', cell: ({ row }) => h('span', { class: 'whitespace-nowrap font-medium' }, row.original.data.site ?? '—') },
+  { accessorKey: 'rowNumber', header: sortHeader('#', 'rowNumber') },
+  { id: 'site', header: sortHeader('Site', 'site'), cell: ({ row }) => h('span', { class: 'whitespace-nowrap font-medium' }, row.original.data.site ?? '—') },
   {
     id: 'resource',
-    header: 'Ressource',
+    header: sortHeader('Ressource', 'resource'),
     cell: ({ row }) => h('div', { class: 'min-w-64 max-w-md 2xl:max-w-xl' }, [h(ShareResource, { data: row.original.data, label: row.original.label })])
   },
   {
     id: 'beneficiary',
-    header: 'Bénéficiaire',
+    header: sortHeader('Bénéficiaire', 'beneficiary'),
     cell: ({ row }) => h('div', { class: 'min-w-56 max-w-xs 2xl:max-w-sm' }, [h(ShareBeneficiary, { data: row.original.data })])
   },
-  { accessorKey: 'assigneeName', header: 'Valideur', cell: ({ row }) => h('span', { class: 'block min-w-32' }, row.original.assigneeName ?? '—') },
+  { accessorKey: 'assigneeName', header: sortHeader('Valideur', 'assignee'), cell: ({ row }) => h('span', { class: 'block min-w-32' }, row.original.assigneeName ?? '—') },
   {
     id: 'state',
-    header: 'État',
+    header: sortHeader('État', 'state'),
     cell: ({ row }) => {
       const state = itemState(row.original)
       return h(UBadge, { color: state.color, variant: 'subtle', label: state.label })
@@ -112,7 +197,7 @@ const columns: TableColumn<Item>[] = [
   },
   {
     accessorKey: 'remediationStatus',
-    header: 'Action IT',
+    header: sortHeader('Action IT', 'remediation'),
     cell: ({ row }) => ({ todo: 'À retirer', done: 'Retiré', cancelled: 'Annulée' } as const)[row.original.remediationStatus ?? 'x' as never] ?? '—'
   }
 ]
@@ -311,8 +396,27 @@ function sendEmails() {
     <UCard>
       <template #header>
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <h2 class="font-medium">Lignes à vérifier ({{ data.items.length }})</h2>
-          <USelect v-model="filter" :items="[...filters]" class="w-60" />
+          <h2 class="font-medium">
+            Lignes à vérifier
+            <span class="text-muted">({{ visibleItems.length === data.items.length ? data.items.length : `${visibleItems.length} / ${data.items.length}` }})</span>
+          </h2>
+          <UButton v-if="filtersActive" size="sm" color="neutral" variant="link" icon="i-lucide-filter-x" @click="resetFilters">
+            Réinitialiser les filtres
+          </UButton>
+        </div>
+        <div class="mt-3 flex flex-wrap items-center gap-2">
+          <UInput
+            v-model="search"
+            icon="i-lucide-search"
+            placeholder="Rechercher (ressource, bénéficiaire, valideur…)"
+            aria-label="Rechercher dans les lignes"
+            class="w-full sm:w-80"
+          />
+          <USelect v-model="filter" :items="[...filters]" icon="i-lucide-list-filter" aria-label="Filtrer par état" class="w-56" />
+          <USelectMenu v-model="siteFilter" :items="siteOptions" multiple icon="i-lucide-globe" placeholder="Tous les sites" aria-label="Filtrer par site" class="w-48" />
+          <USelectMenu v-model="assigneeFilter" :items="assigneeOptions" multiple icon="i-lucide-user-round" placeholder="Tous les valideurs" aria-label="Filtrer par valideur" class="w-56" />
+          <USelectMenu v-model="accessFilter" :items="accessOptions" multiple icon="i-lucide-link" placeholder="Tous les accès" aria-label="Filtrer par type d'accès" class="w-56" />
+          <USelectMenu v-model="typeFilter" :items="typeOptions" multiple icon="i-lucide-folder" placeholder="Tous les types" aria-label="Filtrer par type de ressource" class="w-44" />
         </div>
       </template>
 
@@ -339,7 +443,7 @@ function sendEmails() {
         :data="visibleItems"
         :columns="columns"
         :row-selection-options="{ enableRowSelection: row => editable && isPending(row.original) }"
-        :empty="run?.status === 'running' ? 'Collecte en cours…' : 'Aucun partage externe trouvé.'"
+        :empty="run?.status === 'running' ? 'Collecte en cours…' : filtersActive ? 'Aucune ligne ne correspond aux filtres.' : 'Aucun partage externe trouvé.'"
         sticky
         :ui="{ th: 'whitespace-nowrap', td: 'whitespace-normal align-top py-3' }"
       />

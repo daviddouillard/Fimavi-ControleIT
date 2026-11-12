@@ -59,6 +59,27 @@ test('l\'admin assigne plusieurs lignes, en clôture une sans validation et ouvr
   await expect(page.getByText('Clôturée sans validation').first()).toBeVisible()
 })
 
+test('l\'admin trie et filtre les lignes de la session', async ({ page, baseURL }) => {
+  await as(page, baseURL, 'admin')
+  await page.goto(sessionUrl)
+  await page.waitForLoadState('networkidle')
+  const firstRowNumber = () => page.locator('tbody tr').first().locator('td').nth(1)
+  await expect(firstRowNumber()).toHaveText('1')
+
+  // Tri par défaut croissant sur # : un clic inverse l'ordre, un autre colonne repart en croissant.
+  await page.getByRole('button', { name: 'Trier par #' }).click()
+  await expect(firstRowNumber()).not.toHaveText('1')
+  await page.getByRole('button', { name: 'Trier par Ressource' }).click()
+  await expect(firstRowNumber()).toHaveText('1')
+
+  // Recherche plein texte, puis réinitialisation.
+  await page.getByRole('textbox', { name: 'Rechercher dans les lignes' }).fill('projet 2')
+  await expect(page.getByRole('heading', { name: /Lignes à vérifier \(1 \// })).toBeVisible()
+  await expect(firstRowNumber()).toHaveText('2')
+  await page.getByRole('button', { name: 'Réinitialiser les filtres' }).click()
+  await expect(page.getByRole('heading', { name: /Lignes à vérifier \(\d+\)/ })).toBeVisible()
+})
+
 test('l\'admin ne peut pas envoyer les emails sans messagerie configurée', async ({ page, baseURL }) => {
   await as(page, baseURL, 'admin')
   await page.goto(sessionUrl)

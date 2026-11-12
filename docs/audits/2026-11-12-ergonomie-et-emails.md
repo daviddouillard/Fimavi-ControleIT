@@ -77,6 +77,17 @@ Revue de sécurité :
 - **Contenu** : même gabarit échappé que pour les valideurs.
 - **Traçabilité** : chaque envoi est historisé (0 ligne) et l'audit liste les personnes ajoutées à la main (`addedByHand`).
 
+## Tris et filtres des lignes d'une session
+
+- **Tri** : clic sur l'en-tête des colonnes #, Site, Ressource, Bénéficiaire, Valideur, État et Action IT. Un clic donne l'ordre croissant, un second clic l'ordre décroissant. Le tri tient compte des nombres (« Projet 2 » avant « Projet 10 »).
+- **Filtres** :
+  - recherche plein texte (ressource, bénéficiaire, site, valideur, commentaire) ;
+  - état, avec deux nouveaux choix « Partage validé » et « Partage à arrêter » ;
+  - choix multiple par site, valideur (dont « Sans valideur »), type d'accès et type de ressource ;
+  - compteur « lignes affichées / total » et bouton « Réinitialiser les filtres ».
+- La sélection multiple est vidée à chaque changement de filtre ou de tri : on n'assigne jamais une ligne masquée.
+- **Sécurité** : traitement entièrement côté navigateur, sur les données déjà chargées par l'admin. Aucune nouvelle route, aucun `v-html`. TNR : typecheck OK, `npm run test` 81/81, `npm run test:e2e` 24/24 (nouveau test : tri, recherche, réinitialisation).
+
 Rechargement automatique après déploiement : un onglet ouvert sur l'ancienne version affichait une erreur 500 (« Failed to fetch dynamically imported module »). La page est désormais rechargée aussitôt (`experimental.emitRouteChunkError: 'automatic-immediate'`). Ce changement est sans effet sur la sécurité.
 
 TNR : typecheck OK ; `npm run test` 81/81 (envoi à une personne ajoutée, compte désactivé ignoré, au moins un destinataire exigé) ; `npm run test:e2e` 23/23 (ajout de « Marc Manager » par recherche, envoi à 2 destinataires).
