@@ -86,17 +86,20 @@ export function assignmentEmail(input: { recipientName: string, sessionName: str
 }
 
 /**
- * Envoie un email à chaque valideur sélectionné ayant des lignes en attente (session ouverte uniquement).
+ * Envoie un email à chaque valideur sélectionné ayant des lignes en attente (session ouverte uniquement),
+ * et aux personnes de l'annuaire ajoutées à la main par l'admin (même email, sans compteur de lignes).
  * Chaque envoi, réussi ou non, est enregistré : il sert d'historique des relances.
  */
 export async function sendAssignmentEmails(
   db: Database,
   actor: Actor,
   sessionId: string,
-  recipientIds: string[],
-  deps: { mailer: Mailer, appUrl: string, content?: EmailContent },
+  validatorIds: string[],
+  deps: { mailer: Mailer, appUrl: string, content?: EmailContent, extraRecipientIds?: string[] },
   event?: RequestEvent
 ) {
+  const extraIds = deps.extraRecipientIds ?? []
+  const recipientIds = [...new Set([...validatorIds, ...extraIds])]
   const [session] = await db.select({ name: controlSessions.name, status: controlSessions.status }).from(controlSessions).where(eq(controlSessions.id, sessionId))
   if (!session) throw createError({ status: 404, message: 'Session introuvable' })
   if (session.status !== 'open') throw createError({ status: 409, message: 'Ouvrez la session avant d\'envoyer les emails' })
@@ -112,6 +115,17 @@ export async function sendAssignmentEmails(
     .innerJoin(users, eq(users.id, checkItems.assigneeId))
     .where(and(eq(checkItems.sessionId, sessionId), inArray(users.id, recipientIds), eq(users.accountEnabled, true), pendingFilter))
     .groupBy(users.id)
+
+  // Personnes ajoutées à la main : comptes actifs de l'annuaire, sans ligne en attente dans la session.
+  const extraOnly = extraIds.filter(id => !recipients.some(r => r.id === id))
+  if (extraOnly.length) {
+    recipients.push(...await db.select({
+      id: users.id,
+      displayName: users.displayName,
+      address: sql<string | null>`coalesce(${users.mail}, ${users.userPrincipalName})`,
+      pending: sql<number>`0::int`
+    }).from(users).where(and(inArray(users.id, extraOnly), eq(users.accountEnabled, true))))
+  }
 
   const results: { recipientId: string, status: 'sent' | 'failed', error?: string }[] = []
   for (const recipient of recipients) {
@@ -134,7 +148,7 @@ export async function sendAssignmentEmails(
     entityType: 'control_session',
     entityId: sessionId,
     sessionId,
-    after: { results, skipped: recipientIds.filter(id => !recipients.some(r => r.id === id)) }
+    after: { results, addedByHand: extraOnly, skipped: recipientIds.filter(id => !recipients.some(r => r.id === id)) }
   }, event)
 
   return {

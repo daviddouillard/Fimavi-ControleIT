@@ -68,7 +68,12 @@ test('l\'admin ne peut pas envoyer les emails sans messagerie configurée', asyn
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByRole('checkbox', { name: 'Envoyer l\'email à Valérie Valideuse' })).toBeChecked()
   await expect(dialog.getByRole('textbox').first()).toHaveValue(/partages externes à vérifier/)
-  await dialog.getByRole('button', { name: 'Envoyer (1)' }).click()
+  // Ajout d'un destinataire par recherche dans l'annuaire, puis retrait possible.
+  await dialog.getByRole('button', { name: /Ajouter un destinataire/ }).click()
+  await page.keyboard.type('ma')
+  await page.getByRole('option', { name: 'Marc Manager' }).click()
+  await expect(dialog.getByRole('button', { name: 'Retirer Marc Manager des destinataires' })).toBeVisible()
+  await dialog.getByRole('button', { name: 'Envoyer (2)' }).click()
   await expect(page.getByText('Messagerie non configurée').first()).toBeVisible()
 })
 

@@ -4,6 +4,7 @@ import ShareBeneficiary from '~/components/ShareBeneficiary.vue'
 import ShareResource from '~/components/ShareResource.vue'
 import { DEFAULT_EMAIL_MESSAGE, defaultEmailSubject, messageParagraphs, pendingSentence } from '#shared/emails'
 import { notifySchema } from '#shared/schemas/checks'
+import type { DirectoryUser } from '~/composables/useDirectorySearch'
 
 const UCheckbox = resolveComponent('UCheckbox')
 const UBadge = resolveComponent('UBadge')
@@ -117,27 +118,8 @@ const columns: TableColumn<Item>[] = [
 ]
 
 // Recherche du valideur (annuaire synchronisé depuis Entra ID)
-interface DirectoryUser { id: string, displayName: string, mail: string | null, department: string | null }
 const assignee = ref<DirectoryUser>()
-const searchTerm = ref('')
-const userItems = ref<DirectoryUser[]>([])
-const searching = ref(false)
-let searchTimer: ReturnType<typeof setTimeout> | undefined
-watch(searchTerm, (term) => {
-  clearTimeout(searchTimer)
-  if (term.trim().length < 2) return
-  searchTimer = setTimeout(async () => {
-    searching.value = true
-    try {
-      userItems.value = await $fetch<DirectoryUser[]>('/api/admin/users', { query: { q: term.trim() } })
-    } catch {
-      userItems.value = []
-      toast.add({ title: 'Recherche impossible', description: 'L\'annuaire n\'a pas répondu, réessayez dans un instant.', color: 'error' })
-    } finally {
-      searching.value = false
-    }
-  }, 300)
-})
+const { searchTerm, items: userItems, searching } = useDirectorySearch()
 
 const busy = ref(false)
 async function act(action: () => Promise<string>) {
@@ -217,9 +199,10 @@ function relaunch() {
 const pendingAssignees = computed(() => (data.value?.assignees ?? []).filter(a => a.pending > 0))
 const answeredAssignees = computed(() => (data.value?.assignees ?? []).filter(a => a.pending === 0))
 const emailOpen = ref(false)
-const email = reactive<{ recipientIds: string[], subject: string, message: string }>({ recipientIds: [], subject: '', message: '' })
+const email = reactive<{ recipientIds: string[], extras: DirectoryUser[], subject: string, message: string }>({ recipientIds: [], extras: [], subject: '', message: '' })
 function openEmail() {
   email.recipientIds = pendingAssignees.value.map(a => a.id)
+  email.extras = []
   email.subject = defaultEmailSubject(session.value?.name ?? '')
   email.message = DEFAULT_EMAIL_MESSAGE
   emailOpen.value = true
@@ -230,14 +213,38 @@ function toggleRecipient(userId: string, checked: boolean) {
 function toggleAllRecipients() {
   email.recipientIds = email.recipientIds.length === pendingAssignees.value.length ? [] : pendingAssignees.value.map(a => a.id)
 }
-const canSendEmail = computed(() => session.value?.status === 'open' && notifySchema.safeParse(email).success)
+// Destinataires ajoutés à la main (recherche dans l'annuaire, comme pour l'assignation).
+const { searchTerm: extraSearch, items: extraItems, searching: extraSearching } = useDirectorySearch()
+const extraPick = ref<DirectoryUser>()
+watch(extraPick, (user) => {
+  if (!user) return
+  // Un valideur en attente est simplement coché ; les autres personnes s'ajoutent à la liste.
+  if (pendingAssignees.value.some(a => a.id === user.id)) toggleRecipient(user.id, true)
+  else if (!email.extras.some(e => e.id === user.id)) email.extras = [...email.extras, user]
+  nextTick(() => {
+    extraPick.value = undefined
+    extraSearch.value = ''
+  })
+})
+function removeExtra(userId: string) {
+  email.extras = email.extras.filter(e => e.id !== userId)
+}
+const recipientCount = computed(() => email.recipientIds.length + email.extras.length)
+const emailPayload = computed(() => ({
+  recipientIds: email.recipientIds,
+  extraRecipientIds: email.extras.map(e => e.id),
+  subject: email.subject,
+  message: email.message
+}))
+const canSendEmail = computed(() => session.value?.status === 'open' && notifySchema.safeParse(emailPayload.value).success)
 const preview = computed(() => {
   const first = pendingAssignees.value.find(a => email.recipientIds.includes(a.id))
-  return { name: first?.displayName ?? 'Prénom Nom', pending: first?.pending ?? 1 }
+  if (first) return { name: first.displayName, pending: first.pending }
+  return { name: email.extras[0]?.displayName ?? 'Prénom Nom', pending: email.extras.length ? 0 : 1 }
 })
 const previewParagraphs = computed(() => messageParagraphs(email.message))
 function sendEmails() {
-  const parsed = notifySchema.safeParse(email)
+  const parsed = notifySchema.safeParse(emailPayload.value)
   if (!parsed.success) return
   return act(async () => {
     const r = await $fetch(`/api/admin/sessions/${id.value}/notify`, { method: 'POST', body: parsed.data })
@@ -417,18 +424,18 @@ function sendEmails() {
             color="success"
             variant="subtle"
             icon="i-lucide-circle-check"
-            :description="data.assignees.length ? 'Tous les valideurs ont répondu : personne à relancer.' : 'Aucune ligne n\'est assignée : assignez des lignes avant de prévenir les valideurs.'"
+            :description="data.assignees.length ? 'Tous les valideurs ont répondu : personne à relancer. Vous pouvez ajouter un destinataire ci-dessous.' : 'Aucune ligne n\'est assignée. Vous pouvez ajouter un destinataire ci-dessous.'"
           />
-          <section v-if="pendingAssignees.length" class="space-y-2">
+          <section class="space-y-2">
             <div class="flex items-center justify-between gap-2">
               <h3 class="flex items-center gap-2 text-sm font-medium">
-                <UIcon name="i-lucide-users-round" class="size-4" /> Destinataires ({{ email.recipientIds.length }})
+                <UIcon name="i-lucide-users-round" class="size-4" /> Destinataires ({{ recipientCount }})
               </h3>
-              <UButton size="xs" variant="link" color="neutral" @click="toggleAllRecipients">
+              <UButton v-if="pendingAssignees.length" size="xs" variant="link" color="neutral" @click="toggleAllRecipients">
                 {{ email.recipientIds.length === pendingAssignees.length ? 'Tout décocher' : 'Tout cocher' }}
               </UButton>
             </div>
-            <ul class="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-default p-2">
+            <ul v-if="pendingAssignees.length || email.extras.length" class="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-default p-2">
               <li v-for="a in pendingAssignees" :key="a.id" class="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-elevated">
                 <UCheckbox
                   :model-value="email.recipientIds.includes(a.id)"
@@ -442,7 +449,35 @@ function sendEmails() {
                 </span>
                 <UBadge color="warning" variant="soft" size="sm">{{ a.pending }} en attente</UBadge>
               </li>
+              <li v-for="e in email.extras" :key="e.id" class="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-elevated">
+                <UIcon name="i-lucide-user-plus" class="size-4 text-primary" />
+                <UAvatar :alt="e.displayName" size="xs" />
+                <span class="min-w-0 flex-1">
+                  <span class="font-medium">{{ e.displayName }}</span>
+                  <span class="ml-2 text-xs text-muted break-all">{{ e.mail }}</span>
+                </span>
+                <UBadge color="primary" variant="soft" size="sm">Ajouté</UBadge>
+                <UButton
+                  size="xs"
+                  color="neutral"
+                  variant="ghost"
+                  icon="i-lucide-x"
+                  :aria-label="`Retirer ${e.displayName} des destinataires`"
+                  @click="removeExtra(e.id)"
+                />
+              </li>
             </ul>
+            <USelectMenu
+              v-model="extraPick"
+              v-model:search-term="extraSearch"
+              :items="extraItems"
+              :loading="extraSearching"
+              label-key="displayName"
+              ignore-filter
+              icon="i-lucide-user-plus"
+              placeholder="Ajouter un destinataire (2 lettres min.)"
+              class="w-full sm:w-96"
+            />
             <p v-if="answeredAssignees.length" class="text-xs text-muted">
               Déjà à jour, non relancé(s) : {{ answeredAssignees.map(a => a.displayName).join(', ') }}.
             </p>
@@ -470,7 +505,7 @@ function sendEmails() {
                 <template v-for="(line, j) in lines" :key="j"><br v-if="j">{{ line }}</template>
               </p>
             </div>
-            <p class="text-xs text-muted">Le nombre de lignes et le lien vers ControleIT sont ajoutés à chaque email. Envoi depuis la boîte du service informatique.</p>
+            <p class="text-xs text-muted">Le nombre de lignes et le lien vers ControleIT sont ajoutés à chaque email (sans nombre pour un destinataire ajouté). Envoi depuis la boîte du service informatique.</p>
           </section>
         </form>
       </template>
@@ -478,7 +513,7 @@ function sendEmails() {
         <div class="flex w-full justify-end gap-2">
           <UButton color="neutral" variant="ghost" @click="emailOpen = false">Annuler</UButton>
           <UButton type="submit" form="email-form" icon="i-lucide-send" :loading="busy" :disabled="!canSendEmail">
-            Envoyer ({{ email.recipientIds.length }})
+            Envoyer ({{ recipientCount }})
           </UButton>
         </div>
       </template>

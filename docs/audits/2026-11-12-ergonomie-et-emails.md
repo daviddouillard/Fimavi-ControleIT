@@ -66,3 +66,15 @@ RBAC for Applications configuré dans Exchange Online :
   - Une recherche en échec affiche désormais un message.
 
 TNR : typecheck OK, `npm run test` 80/80, `npm run test:e2e` 23/23. Le test E2E vérifie la fenêtre en brouillon et la recherche à 2 lettres.
+
+## Ajout de destinataires depuis l'annuaire
+
+Dans la fenêtre d'email, l'admin peut chercher une personne de l'annuaire (2 lettres minimum, comme pour l'assignation) et l'ajouter aux destinataires. Elle reçoit le même email que les valideurs, sans nombre de lignes (« Vous êtes sollicité(e) pour la campagne… »), avec le lien vers l'application. Un valideur en attente choisi par la recherche est simplement coché.
+
+Revue de sécurité :
+- **Autorisation** : route inchangée, réservée à l'admin ; recherche dans l'annuaire déjà réservée à l'admin.
+- **Destinataires** : identifiants validés par Zod (UUID, 20 au plus, dédoublonnés). Le serveur ne retient que des comptes **actifs de l'annuaire synchronisé**. Aucune adresse libre n'est acceptée, donc l'application ne peut pas servir à écrire à l'extérieur. La règle de sécurité du projet (`CLAUDE.md` §4) est mise à jour en ce sens.
+- **Contenu** : même gabarit échappé que pour les valideurs.
+- **Traçabilité** : chaque envoi est historisé (0 ligne) et l'audit liste les personnes ajoutées à la main (`addedByHand`).
+
+TNR : typecheck OK ; `npm run test` 81/81 (envoi à une personne ajoutée, compte désactivé ignoré, au moins un destinataire exigé) ; `npm run test:e2e` 23/23 (ajout de « Marc Manager » par recherche, envoi à 2 destinataires).

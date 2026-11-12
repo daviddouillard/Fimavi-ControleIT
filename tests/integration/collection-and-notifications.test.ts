@@ -241,6 +241,20 @@ describe('emails aux valideurs', () => {
     expect(await db.select().from(notifications).where(and(eq(notifications.sessionId, s.session.id), eq(notifications.recipientId, s.validator.id)))).toHaveLength(2)
   })
 
+  it('envoie aussi aux personnes ajoutées à la main, sans compteur, et ignore les comptes désactivés', async () => {
+    const s = await seedSession(db, 'open')
+    const sent: MailMessage[] = []
+    const result = await sendAssignmentEmails(db, s.admin, s.session.id, [], {
+      mailer: async (m) => { sent.push(m) }, appUrl: 'https://app.test', extraRecipientIds: [s.validator.id, s.disabled.id]
+    })
+    expect(result).toEqual({ sent: 1, failed: 0, skipped: 1 })
+    expect(sent[0]).toMatchObject({ to: 'n1@fimavi.test' })
+    expect(sent[0]!.html).toContain('Vous êtes sollicité(e) pour la campagne de vérification')
+    expect(sent[0]!.html).toContain('href="https://app.test"')
+    const [row] = await db.select().from(notifications).where(eq(notifications.sessionId, s.session.id))
+    expect(row).toMatchObject({ recipientId: s.validator.id, pendingCount: 0, status: 'sent' })
+  })
+
   it('refuse l\'envoi sur une session en brouillon', async () => {
     const s = await seedSession(db, 'draft')
     await expect(sendAssignmentEmails(db, s.admin, s.session.id, [s.validator.id], { mailer: async () => {}, appUrl: 'https://app.test' }))
@@ -271,6 +285,9 @@ describe('emails aux valideurs', () => {
     expect(notifySchema.safeParse({ ...base, subject: 'Objet\nBcc: x@y.z' }).success).toBe(false)
     expect(notifySchema.safeParse({ ...base, message: '   ' }).success).toBe(false)
     expect(notifySchema.safeParse({ ...base, subject: 'Objet', message: 'Texte' }).success).toBe(true)
+    // Au moins un destinataire, valideur ou personne ajoutée.
+    expect(notifySchema.safeParse({ recipientIds: [] }).success).toBe(false)
+    expect(notifySchema.safeParse({ recipientIds: [], extraRecipientIds: base.recipientIds }).success).toBe(true)
   })
 })
 

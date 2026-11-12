@@ -77,7 +77,7 @@ Application web de **contrôles IT** : l'équipe IT (droit Entra spécifique) ou
   - « Mauvaise attribution » rend la ligne à l'admin (« À réattribuer », sans valideur, commentaire visible) ; elle disparaît de la liste du valideur. À la réassignation, la ligne repart sans réponse (le signalement reste dans l'audit).
   - Il peut **changer d'avis** tant que la session est ouverte. Chaque changement est tracé ; si une demande d'arrêt est abandonnée, l'action de retrait encore « à faire » est annulée.
   - Il ne voit **que les lignes que l'admin lui a assignées**.
-- **Emails** : bouton « Envoyer l'email » sur la session **ouverte** : un email par valideur coché ayant des lignes en attente (nombre de lignes + lien). Renvoyable pour relancer ; chaque envoi (réussi ou en échec) est historisé.
+- **Emails** : bouton « Préparer l'email » (toujours cliquable ; l'envoi n'est possible que sur une session **ouverte**). Il ouvre une fenêtre avec l'objet et le message modifiables. Par défaut, tous les valideurs ayant des lignes en attente sont cochés ; chacun reçoit un email avec son nombre de lignes et le lien. L'admin peut ajouter d'autres personnes en les cherchant dans l'annuaire : elles reçoivent le même email, sans nombre de lignes. Renvoyable pour relancer ; chaque envoi (réussi ou en échec) est historisé.
 - **Action de remédiation** : créée automatiquement sur « Arrêter le partage ». Elle va dans un **pot commun de l'IT** (pas d'attribution nominative), statut `à faire → fait`. **V1 : retrait de l'accès fait manuellement par l'IT**, puis marqué « fait » dans l'application. Une action faite **disparaît de la liste à faire** et reste consultable dans l'historique, avec qui l'a traitée et quand.
 - **Pas d'échéance**, **pas d'export** et **pas de lien entre sessions** : chaque session repose la question, même pour un accès déjà validé auparavant.
 - **Un seul rôle admin** (pas de rôle lecture seule).
@@ -98,7 +98,7 @@ Application web de **contrôles IT** : l'équipe IT (droit Entra spécifique) ou
 - **Autorisation vérifiée côté serveur sur chaque route** (middleware + contrôle d'appartenance de la ressource) — jamais seulement côté client.
 - Un utilisateur ne peut lire/modifier que ses propres assignations (anti-IDOR).
 - Graph : jeton envoyé uniquement à `https://graph.microsoft.com/v1.0/` (liens de pagination compris) ; URL de site validée (`*.sharepoint.com`, `/sites|/teams/<nom>`) avant usage.
-- Emails : contenu HTML échappé ; destinataires limités aux valideurs ayant des lignes en attente dans la session.
+- Emails : contenu HTML échappé ; destinataires limités aux valideurs ayant des lignes en attente dans la session, plus au plus 20 personnes de l'annuaire (comptes actifs) ajoutées à la main par l'admin.
 - Requêtes BDD uniquement via l'ORM / requêtes paramétrées.
 - Pas de `v-html` sur des données importées ou saisies.
 - Logs applicatifs sans secrets ni tokens.

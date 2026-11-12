@@ -30,11 +30,14 @@ export const remediationDoneSchema = z.object({
 })
 
 export const notifySchema = z.object({
-  recipientIds: z.array(z.uuid()).min(1).max(100).transform(ids => [...new Set(ids)]),
+  /** Valideurs de la session ayant des lignes en attente. */
+  recipientIds: z.array(z.uuid()).max(100).transform(ids => [...new Set(ids)]),
+  /** Personnes de l'annuaire ajoutées à la main par l'admin (même email, sans compteur de lignes). */
+  extraRecipientIds: z.array(z.uuid()).max(20).default([]).transform(ids => [...new Set(ids)]),
   /** Objet et message modifiables par l'admin (texte brut, échappé à l'envoi). Absents : textes par défaut. */
   subject: z.string().trim().min(1, 'L\'objet est obligatoire').max(200).refine(v => !/[\r\n]/.test(v), 'Objet sur une seule ligne').optional(),
   message: z.string().trim().min(1, 'Le message est obligatoire').max(5000).optional()
-})
+}).refine(v => v.recipientIds.length + v.extraRecipientIds.length > 0, { message: 'Choisissez au moins un destinataire', path: ['recipientIds'] })
 
 export const userSearchSchema = z.object({
   q: z.string().trim().min(2).max(100)
