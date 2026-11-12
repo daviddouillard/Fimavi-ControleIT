@@ -130,6 +130,9 @@ watch(searchTerm, (term) => {
     searching.value = true
     try {
       userItems.value = await $fetch<DirectoryUser[]>('/api/admin/users', { query: { q: term.trim() } })
+    } catch {
+      userItems.value = []
+      toast.add({ title: 'Recherche impossible', description: 'L\'annuaire n\'a pas répondu, réessayez dans un instant.', color: 'error' })
     } finally {
       searching.value = false
     }
@@ -210,7 +213,9 @@ function relaunch() {
 
 // Emails aux valideurs (envoi initial et relances)
 // Emails aux valideurs : fenêtre de préparation (destinataires, objet, message modifiables).
+// Destinataires : tous les valideurs ayant au moins une ligne sans réponse (envoi initial comme relance).
 const pendingAssignees = computed(() => (data.value?.assignees ?? []).filter(a => a.pending > 0))
+const answeredAssignees = computed(() => (data.value?.assignees ?? []).filter(a => a.pending === 0))
 const emailOpen = ref(false)
 const email = reactive<{ recipientIds: string[], subject: string, message: string }>({ recipientIds: [], subject: '', message: '' })
 function openEmail() {
@@ -225,7 +230,7 @@ function toggleRecipient(userId: string, checked: boolean) {
 function toggleAllRecipients() {
   email.recipientIds = email.recipientIds.length === pendingAssignees.value.length ? [] : pendingAssignees.value.map(a => a.id)
 }
-const canSendEmail = computed(() => notifySchema.safeParse(email).success)
+const canSendEmail = computed(() => session.value?.status === 'open' && notifySchema.safeParse(email).success)
 const preview = computed(() => {
   const first = pendingAssignees.value.find(a => email.recipientIds.includes(a.id))
   return { name: first?.displayName ?? 'Prénom Nom', pending: first?.pending ?? 1 }
@@ -345,11 +350,7 @@ function sendEmails() {
               <p class="text-sm text-muted">Prévenez les valideurs qu'ils ont des lignes à vérifier. Renvoyez l'email pour relancer.</p>
             </div>
           </div>
-          <UButton
-            icon="i-lucide-mail"
-            :disabled="session.status !== 'open' || !pendingAssignees.length"
-            @click="openEmail"
-          >
+          <UButton icon="i-lucide-mail" @click="openEmail">
             Préparer l'email
           </UButton>
         </div>
@@ -404,7 +405,21 @@ function sendEmails() {
     <UModal v-model:open="emailOpen" title="Prévenir les valideurs" description="Vérifiez les destinataires et le message, puis envoyez." :ui="{ content: 'sm:max-w-3xl' }">
       <template #body>
         <form id="email-form" class="space-y-6" @submit.prevent="sendEmails">
-          <section class="space-y-2">
+          <UAlert
+            v-if="session.status !== 'open'"
+            color="warning"
+            variant="subtle"
+            icon="i-lucide-triangle-alert"
+            :description="session.status === 'draft' ? 'La session est en brouillon : ouvrez-la pour pouvoir envoyer les emails.' : 'La session est clôturée : plus aucun email ne peut être envoyé.'"
+          />
+          <UAlert
+            v-else-if="!pendingAssignees.length"
+            color="success"
+            variant="subtle"
+            icon="i-lucide-circle-check"
+            :description="data.assignees.length ? 'Tous les valideurs ont répondu : personne à relancer.' : 'Aucune ligne n\'est assignée : assignez des lignes avant de prévenir les valideurs.'"
+          />
+          <section v-if="pendingAssignees.length" class="space-y-2">
             <div class="flex items-center justify-between gap-2">
               <h3 class="flex items-center gap-2 text-sm font-medium">
                 <UIcon name="i-lucide-users-round" class="size-4" /> Destinataires ({{ email.recipientIds.length }})
@@ -428,6 +443,9 @@ function sendEmails() {
                 <UBadge color="warning" variant="soft" size="sm">{{ a.pending }} en attente</UBadge>
               </li>
             </ul>
+            <p v-if="answeredAssignees.length" class="text-xs text-muted">
+              Déjà à jour, non relancé(s) : {{ answeredAssignees.map(a => a.displayName).join(', ') }}.
+            </p>
           </section>
 
           <UFormField label="Objet" required>

@@ -48,6 +48,21 @@ Aucun constat ouvert.
 - `npm run test:e2e` : 23/23. Le parcours d'envoi passe désormais par la fenêtre de préparation (destinataire pré-coché, objet par défaut).
 - Rendu vérifié par captures en 1 440 px, avec des données réalistes : tableau de bord, session, fenêtre d'email, page du valideur, fenêtre de réponse.
 
-## Action restante (hors code)
+## Autorisation Exchange (fait le 2026-11-12)
 
-Configurer dans Exchange Online l'autorisation d'envoi de l'application, limitée à `helpdesk@fimavi.com` (RBAC for Applications).
+RBAC for Applications configuré dans Exchange Online :
+- principal de service `ControleIT` déclaré ;
+- périmètre `ControleIT-Helpdesk` limité à `helpdesk@fimavi.com` ;
+- rôle `Application Mail.Send` assigné sur ce périmètre.
+
+`Test-ServicePrincipalAuthorization` donne `InScope = True` pour helpdesk. Aucune permission Mail.Send n'a été ajoutée dans Entra.
+
+## Correctif : bouton email et recherche de valideur
+
+- **Bouton « Préparer l'email »** toujours actif, pour permettre les relances. La fenêtre explique pourquoi l'envoi est impossible : session en brouillon ou clôturée, aucun valideur en attente, aucune ligne assignée. Le bouton Envoyer reste désactivé dans ces cas et le serveur refuse toujours l'envoi hors session ouverte. Destinataires : tous les valideurs ayant au moins une ligne sans réponse ; ceux qui sont à jour sont listés comme non relancés.
+- **Recherche de valideur sans résultat en production.** La limite de requêtes de `nuxt-security` (150 requêtes par 5 min par IP par défaut) comptait aussi les fichiers statiques de l'application et est partagée par toute l'équipe derrière la même IP. Les recherches tombaient en 429 et la liste restait vide sans message.
+  - Fichiers `/_nuxt/**` exclus de la limite.
+  - Limite portée à 1 500 requêtes par 5 min et par IP. Elle protège toujours contre un abus massif. La connexion passe par Entra ID, il n'y a donc pas de mot de passe local à protéger contre la force brute.
+  - Une recherche en échec affiche désormais un message.
+
+TNR : typecheck OK, `npm run test` 80/80, `npm run test:e2e` 23/23. Le test E2E vérifie la fenêtre en brouillon et la recherche à 2 lettres.

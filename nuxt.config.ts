@@ -47,6 +47,11 @@ export default defineNuxtConfig({
     fallbackToApi: false
   },
 
+  // Fichiers statiques versionnés de l'application : non comptés dans la limite de requêtes.
+  routeRules: {
+    '/_nuxt/**': { security: { rateLimiter: false } }
+  },
+
   security: {
     // On garde les logs serveur (Cloud Logging) ; ils ne doivent jamais contenir de secret ni de jeton.
     removeLoggers: false,
@@ -59,6 +64,12 @@ export default defineNuxtConfig({
         'frame-ancestors': ["'none'"]
       },
       xFrameOptions: 'DENY'
+    },
+    // Toute l'équipe sort par la même IP (NAT du bureau) : 150 requêtes / 5 min par défaut se partageaient
+    // entre tous les utilisateurs et le chargement des pages, et faisaient échouer la recherche (429).
+    rateLimiter: {
+      tokensPerInterval: 1500,
+      interval: 300_000
     },
     requestSizeLimiter: {
       maxRequestSizeInBytes: 2_000_000,

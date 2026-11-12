@@ -36,10 +36,17 @@ test('l\'admin assigne plusieurs lignes, en clôture une sans validation et ouvr
   await expect(page.getByText('3 ligne(s) sélectionnée(s)')).toBeVisible()
 
   await page.getByRole('button', { name: /Rechercher un valideur/ }).click()
-  await page.keyboard.type('Valérie')
+  await page.keyboard.type('va')
   await page.getByRole('option', { name: 'Valérie Valideuse' }).click()
   await page.getByRole('button', { name: 'Assigner' }).click()
   await expect(page.getByText('3 ligne(s) assignée(s)').first()).toBeVisible()
+
+  // Le bouton d'email reste cliquable en brouillon : la fenêtre explique pourquoi l'envoi est bloqué.
+  await page.getByRole('button', { name: 'Préparer l\'email' }).click()
+  const emailDialog = page.getByRole('dialog')
+  await expect(emailDialog.getByText('La session est en brouillon')).toBeVisible()
+  await expect(emailDialog.getByRole('button', { name: /Envoyer/ })).toBeDisabled()
+  await emailDialog.getByRole('button', { name: 'Annuler' }).click()
 
   await rowCheckbox(page, 4).click()
   await page.getByRole('button', { name: 'Clôturer sans validation' }).click()
