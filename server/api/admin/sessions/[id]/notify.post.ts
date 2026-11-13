@@ -10,8 +10,8 @@ import { requireUuidParam } from '../../../../utils/params'
 export default defineEventHandler(async (event) => {
   const admin = await requireAdmin(event)
   const sessionId = requireUuidParam(event, 'id')
-  const { recipientIds, extraRecipientIds, subject, message } = await readValidatedBody(event, notifySchema)
+  const { recipientIds, extraRecipientIds, subject, message, signature } = await readValidatedBody(event, notifySchema)
   return sendAssignmentEmails(useDb(), admin, sessionId, recipientIds, {
-    mailer: graphMailer(), appUrl: appUrl(), content: { subject, message }, extraRecipientIds
+    mailer: graphMailer(), appUrl: appUrl(), content: { subject, message, signature }, extraRecipientIds
   }, event)
 })

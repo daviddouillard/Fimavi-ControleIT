@@ -36,6 +36,10 @@ test('l\'admin assigne plusieurs lignes, en clôture une sans validation et ouvr
   await expect(page.getByText('jean.auteur@fimavi.test').first()).toBeVisible()
   await expect(page.getByText('Valérie Valideuse').first()).toBeVisible()
 
+  // Clic sur l'auteur : absent de l'annuaire (compte externe au jeu de test), rien n'est assigné.
+  await page.getByRole('button', { name: 'jean.auteur@fimavi.test' }).first().click()
+  await expect(page.getByText('Auteur absent de l\'annuaire').first()).toBeVisible()
+
   for (const n of [1, 2, 3]) await rowCheckbox(page, n).click()
   await expect(page.getByText('3 ligne(s) sélectionnée(s)')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Assigner au N+1 suggéré (3)' })).toBeVisible()
@@ -94,6 +98,15 @@ test('l\'admin ne peut pas envoyer les emails sans messagerie configurée', asyn
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByRole('checkbox', { name: 'Envoyer l\'email à Valérie Valideuse' })).toBeChecked()
   await expect(dialog.getByRole('textbox').first()).toHaveValue(/partages externes à vérifier/)
+  // Mise en forme du message (gras) et signature, visibles dans l'aperçu.
+  const editors = dialog.locator('.ProseMirror')
+  await editors.first().click()
+  await page.keyboard.press('ControlOrMeta+a')
+  await dialog.getByRole('button', { name: 'Gras' }).first().click()
+  await expect(dialog.locator('span.font-semibold', { hasText: 'Le service informatique vous a confié' })).toBeVisible()
+  await editors.nth(1).click()
+  await page.keyboard.type('Cordialement, Équipe IT')
+  await expect(dialog.getByText('Cordialement, Équipe IT')).toHaveCount(2)
   // Ajout d'un destinataire par recherche dans l'annuaire, puis retrait possible.
   await dialog.getByRole('button', { name: /Ajouter un destinataire/ }).click()
   await page.keyboard.type('ma')
@@ -144,12 +157,11 @@ test('l\'admin voit la ligne à réattribuer avec le commentaire et la confie au
   await page.goto(sessionUrl)
   await expect(page.getByText('Valérie Valideuse : « Voir Marc Manager »')).toBeVisible()
   await page.waitForLoadState('networkidle')
-  await rowCheckbox(page, 3).click()
-  await page.getByRole('button', { name: /Rechercher un valideur/ }).click()
+  // Choix du valideur directement dans la colonne Valideur, sans cocher la ligne.
+  await page.getByRole('button', { name: 'Choisir le valideur de la ligne 3' }).click()
   await page.keyboard.type('Marc')
-  await page.getByRole('option', { name: 'Marc Manager' }).click()
-  await page.getByRole('button', { name: 'Assigner', exact: true }).click()
-  await expect(page.getByText('1 ligne(s) assignée(s)').first()).toBeVisible()
+  await page.getByRole('option', { name: /Marc Manager/ }).click()
+  await expect(page.getByText('1 ligne(s) assignée(s) à Marc Manager').first()).toBeVisible()
 
   await as(page, baseURL, 'otherValidator')
   await page.goto('/')

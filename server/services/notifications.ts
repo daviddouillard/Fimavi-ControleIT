@@ -4,7 +4,8 @@ import { createError, type RequestEvent } from 'nuxt/server'
 import { checkItems, controlSessions, notifications, users } from '../db/schema'
 import { recordAudit } from '../utils/audit'
 import type { Database } from '../utils/db'
-import { DEFAULT_EMAIL_MESSAGE, defaultEmailSubject, messageParagraphs, pendingSentence } from '../../shared/emails'
+import { defaultEmailDoc, defaultEmailSubject, pendingSentence } from '../../shared/emails'
+import { isEmptyDoc, richToHtml, type RichNode } from '../../shared/richText'
 import type { Actor } from './checks'
 
 export interface MailMessage {
@@ -65,24 +66,40 @@ const escapeHtml = (value: string) => value.replace(/[&<>"']/g, c => ({ '&': '&a
 
 export interface EmailContent {
   subject?: string
-  message?: string
+  /** Corps mis en forme (document de l'éditeur) ; absent : message par défaut. */
+  message?: RichNode
+  /** Signature de l'expéditeur, ajoutée en fin d'email. */
+  signature?: RichNode | null
 }
 
 /**
  * Email d'un valideur : « Bonjour <nom>, », nombre de lignes en attente et lien vers l'application (toujours
- * ajoutés), puis message de l'admin (texte brut échappé, signature comprise).
+ * ajoutés), puis message de l'admin et sa signature. Le HTML est produit par richToHtml (texte échappé, styles vérifiés).
  */
 export function assignmentEmail(input: { recipientName: string, sessionName: string, pending: number, appUrl: string } & EmailContent): Omit<MailMessage, 'to'> {
-  const paragraphs = messageParagraphs(input.message ?? DEFAULT_EMAIL_MESSAGE)
   return {
     subject: input.subject ?? defaultEmailSubject(input.sessionName),
     html: [
       `<p>Bonjour ${escapeHtml(input.recipientName)},</p>`,
       `<p><strong>${escapeHtml(pendingSentence(input.pending, input.sessionName))}</strong><br>`
         + `<a href="${escapeHtml(input.appUrl)}">Accéder à mes vérifications</a></p>`,
-      ...paragraphs.map(lines => `<p>${lines.map(escapeHtml).join('<br>')}</p>`)
+      `<div>${richToHtml(input.message ?? defaultEmailDoc())}</div>`,
+      ...(input.signature && !isEmptyDoc(input.signature) ? [`<br><div>${richToHtml(input.signature)}</div>`] : [])
     ].join('\n')
   }
+}
+
+/** Signature enregistrée d'un administrateur (null : aucune). */
+export async function getSignature(db: Pick<Database, 'select'>, userId: string): Promise<RichNode | null> {
+  const [row] = await db.select({ signature: users.emailSignature }).from(users).where(eq(users.id, userId))
+  return row?.signature ?? null
+}
+
+/** Enregistre la signature d'un administrateur (document vide : signature supprimée). */
+export async function saveSignature(db: Pick<Database, 'update'>, userId: string, signature: RichNode | null | undefined): Promise<RichNode | null> {
+  const value = signature && !isEmptyDoc(signature) ? signature : null
+  await db.update(users).set({ emailSignature: value }).where(eq(users.id, userId))
+  return value
 }
 
 /**
@@ -103,6 +120,12 @@ export async function sendAssignmentEmails(
   const [session] = await db.select({ name: controlSessions.name, status: controlSessions.status }).from(controlSessions).where(eq(controlSessions.id, sessionId))
   if (!session) throw createError({ status: 404, message: 'Session introuvable' })
   if (session.status !== 'open') throw createError({ status: 409, message: 'Ouvrez la session avant d\'envoyer les emails' })
+
+  // Signature : celle saisie dans la fenêtre est enregistrée pour les prochains envois ; sinon, la signature enregistrée.
+  const signature = deps.content?.signature !== undefined
+    ? await saveSignature(db, actor.id, deps.content.signature)
+    : await getSignature(db, actor.id)
+  const content = { ...deps.content, signature }
 
   // Seuls des valideurs ayant des lignes en attente dans cette session peuvent être destinataires.
   const recipients = await db.select({
@@ -133,7 +156,7 @@ export async function sendAssignmentEmails(
     let error: string | null = null
     try {
       if (!recipient.address) throw new Error('Adresse email inconnue')
-      await deps.mailer({ to: recipient.address, ...assignmentEmail({ recipientName: recipient.displayName, sessionName: session.name, pending: recipient.pending, appUrl: deps.appUrl, ...deps.content }) })
+      await deps.mailer({ to: recipient.address, ...assignmentEmail({ recipientName: recipient.displayName, sessionName: session.name, pending: recipient.pending, appUrl: deps.appUrl, ...content }) })
     } catch (e) {
       status = 'failed'
       error = e instanceof Error ? e.message : 'erreur inconnue'
@@ -148,7 +171,7 @@ export async function sendAssignmentEmails(
     entityType: 'control_session',
     entityId: sessionId,
     sessionId,
-    after: { results, addedByHand: extraOnly, skipped: recipientIds.filter(id => !recipients.some(r => r.id === id)) }
+    after: { results, signatureUpdated: deps.content?.signature !== undefined, addedByHand: extraOnly, skipped: recipientIds.filter(id => !recipients.some(r => r.id === id)) }
   }, event)
 
   return {

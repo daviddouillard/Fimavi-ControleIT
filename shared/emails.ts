@@ -1,3 +1,5 @@
+import { textToDoc } from './richText'
+
 /** Email « vous avez des vérifications à faire » : textes par défaut, modifiables par l'admin avant envoi. */
 
 export const defaultEmailSubject = (sessionName: string) => `ControleIT : partages externes à vérifier — ${sessionName}`
@@ -11,10 +13,8 @@ export const DEFAULT_EMAIL_MESSAGE = [
   'Le service informatique'
 ].join('\n')
 
-/** Paragraphes d'un message en texte brut (ligne vide = nouveau paragraphe). */
-export function messageParagraphs(message: string): string[][] {
-  return message.replace(/\r\n?/g, '\n').split(/\n{2,}/).map(p => p.split('\n')).filter(p => p.some(line => line.trim()))
-}
+/** Message par défaut sous forme de document de l'éditeur. */
+export const defaultEmailDoc = () => textToDoc(DEFAULT_EMAIL_MESSAGE)
 
 /**
  * Phrase ajoutée automatiquement à chaque email, avec le nombre de lignes du destinataire.

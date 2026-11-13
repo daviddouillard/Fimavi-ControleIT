@@ -3,13 +3,15 @@ import type { TableColumn } from '@nuxt/ui'
 import ShareAuthor from '~/components/ShareAuthor.vue'
 import ShareBeneficiary from '~/components/ShareBeneficiary.vue'
 import ShareResource from '~/components/ShareResource.vue'
-import { DEFAULT_EMAIL_MESSAGE, defaultEmailSubject, messageParagraphs, pendingSentence } from '#shared/emails'
+import { defaultEmailDoc, defaultEmailSubject, pendingSentence } from '#shared/emails'
+import { isEmptyDoc, richPlainText, textToDoc, type RichNode } from '#shared/richText'
 import { notifySchema } from '#shared/schemas/checks'
 import type { DirectoryUser } from '~/composables/useDirectorySearch'
 
 const UCheckbox = resolveComponent('UCheckbox')
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
+const USelectMenu = resolveComponent('USelectMenu')
 const toast = useToast()
 
 const route = useRoute()
@@ -181,9 +183,55 @@ const columns: TableColumn<Item>[] = [
   {
     id: 'author',
     header: sortHeader('Partagé par', 'author'),
-    cell: ({ row }) => h('div', { class: 'min-w-44 max-w-xs' }, [h(ShareAuthor, { data: row.original.data })])
+    cell: ({ row }) => h('div', { class: 'min-w-44 max-w-xs' }, [h(ShareAuthor, {
+      'data': row.original.data,
+      'assignable': editable.value && isPending(row.original),
+      'onPickAuthor': (address: string) => assignAuthor(row.original, address),
+      'onPickSuggested': (userId: string) => assignRow(row.original, { id: userId, displayName: row.original.data.suggestedValidatorName ?? 'N+1 suggéré' })
+    })])
   },
-  { accessorKey: 'assigneeName', header: sortHeader('Valideur', 'assignee'), cell: ({ row }) => h('span', { class: 'block min-w-32' }, row.original.assigneeName ?? '—') },
+  {
+    id: 'assignee',
+    header: sortHeader('Valideur', 'assignee'),
+    cell: ({ row }) => {
+      const item = row.original
+      if (!editable.value || !isPending(item)) return h('span', { class: 'block min-w-32' }, item.assigneeName ?? '—')
+      if (editingRowId.value === item.id) {
+        return h(USelectMenu, {
+          'modelValue': undefined,
+          'searchTerm': rowSearch.value,
+          'onUpdate:searchTerm': (term: string) => { rowSearch.value = term },
+          'items': rowUsers.value,
+          'loading': rowSearching.value,
+          'labelKey': 'displayName',
+          'descriptionKey': 'mail',
+          'ignoreFilter': true,
+          'defaultOpen': true,
+          'placeholder': 'Valideur…',
+          'searchInput': { placeholder: 'Tapez 2 lettres du nom…', autofocus: true },
+          'aria-label': 'Choisir le valideur de la ligne',
+          'class': 'w-56',
+          'onUpdate:modelValue': (user: DirectoryUser) => assignRow(item, user),
+          // Fermeture différée : le choix d'une option est émis après la fermeture de la liste.
+          'onUpdate:open': (open: boolean) => { if (!open) setTimeout(() => { if (editingRowId.value === item.id) editingRowId.value = null }, 300) }
+        })
+      }
+      return h(UButton, {
+        'color': 'neutral',
+        'variant': 'ghost',
+        'size': 'sm',
+        'class': ['-mx-2 min-w-32 justify-between', item.assigneeName ? '' : 'text-muted'],
+        'trailingIcon': 'i-lucide-pencil',
+        'label': item.assigneeName ?? 'Choisir…',
+        'disabled': busy.value,
+        'title': selectedIds.value.includes(item.id) && selectedIds.value.length > 1
+          ? `Choisir le valideur des ${selectedIds.value.length} lignes cochées`
+          : 'Choisir le valideur de cette ligne',
+        'aria-label': `Choisir le valideur de la ligne ${item.rowNumber}`,
+        'onClick': () => startRowEdit(item)
+      })
+    }
+  },
   {
     id: 'state',
     header: sortHeader('État', 'state'),
@@ -235,6 +283,43 @@ function assign() {
     const r = await $fetch(`/api/admin/sessions/${id.value}/assign`, { method: 'POST', body: { itemIds: selectedIds.value, assigneeId } })
     return `${r.assigned} ligne(s) assignée(s)${r.skipped ? `, ${r.skipped} ignorée(s)` : ''}`
   })
+}
+
+// Assignation directe dans le tableau : colonne Valideur (recherche dans l'annuaire) ou clic sur l'auteur / le N+1.
+// Si la ligne fait partie des lignes cochées, le choix s'applique à toutes les lignes cochées.
+const editingRowId = ref<string | null>(null)
+const { searchTerm: rowSearch, items: rowUsers, searching: rowSearching } = useDirectorySearch()
+function startRowEdit(item: Item) {
+  rowSearch.value = ''
+  rowUsers.value = []
+  editingRowId.value = item.id
+}
+const targetIds = (item: Item) => selectedIds.value.includes(item.id) ? selectedIds.value : [item.id]
+function assignRow(item: Item, user: { id: string, displayName: string }) {
+  editingRowId.value = null
+  if (busy.value) return
+  const itemIds = targetIds(item)
+  return act(async () => {
+    const r = await $fetch(`/api/admin/sessions/${id.value}/assign`, { method: 'POST', body: { itemIds, assigneeId: user.id } })
+    return `${r.assigned} ligne(s) assignée(s) à ${user.displayName}${r.skipped ? `, ${r.skipped} ignorée(s)` : ''}`
+  })
+}
+/** Auteur du partage (adresse issue du journal d'audit) : retrouvé dans l'annuaire synchronisé, puis assigné. */
+async function assignAuthor(item: Item, address: string) {
+  const wanted = address.trim().toLowerCase()
+  let found: DirectoryUser[] = []
+  try {
+    found = await $fetch<DirectoryUser[]>('/api/admin/users', { query: { q: address.trim().slice(0, 100) } })
+  } catch {
+    toast.add({ title: 'Recherche impossible', description: 'L\'annuaire n\'a pas répondu, réessayez dans un instant.', color: 'error' })
+    return
+  }
+  const user = found.find(u => u.mail?.toLowerCase() === wanted || u.userPrincipalName?.toLowerCase() === wanted)
+  if (!user) {
+    toast.add({ title: 'Auteur absent de l\'annuaire', description: `${address} n'est pas un compte actif de l'annuaire synchronisé : choisissez le valideur dans la colonne Valideur.`, color: 'warning' })
+    return
+  }
+  return assignRow(item, user)
 }
 
 // Assignation au N+1 de l'auteur du partage (suggestion issue du journal d'audit) : l'admin choisit les lignes.
@@ -312,12 +397,15 @@ function relaunch() {
 const pendingAssignees = computed(() => (data.value?.assignees ?? []).filter(a => a.pending > 0))
 const answeredAssignees = computed(() => (data.value?.assignees ?? []).filter(a => a.pending === 0))
 const emailOpen = ref(false)
-const email = reactive<{ recipientIds: string[], extras: DirectoryUser[], subject: string, message: string }>({ recipientIds: [], extras: [], subject: '', message: '' })
-function openEmail() {
+const email = reactive<{ recipientIds: string[], extras: DirectoryUser[], subject: string, message: RichNode, signature: RichNode }>({ recipientIds: [], extras: [], subject: '', message: defaultEmailDoc(), signature: textToDoc('') })
+async function openEmail() {
   email.recipientIds = pendingAssignees.value.map(a => a.id)
   email.extras = []
   email.subject = defaultEmailSubject(session.value?.name ?? '')
-  email.message = DEFAULT_EMAIL_MESSAGE
+  email.message = defaultEmailDoc()
+  // Signature enregistrée lors du dernier envoi de cet administrateur.
+  const saved = await $fetch('/api/admin/me/signature').catch(() => null)
+  email.signature = saved?.signature ?? textToDoc('')
   emailOpen.value = true
 }
 function toggleRecipient(userId: string, checked: boolean) {
@@ -347,7 +435,8 @@ const emailPayload = computed(() => ({
   recipientIds: email.recipientIds,
   extraRecipientIds: email.extras.map(e => e.id),
   subject: email.subject,
-  message: email.message
+  message: email.message,
+  signature: email.signature
 }))
 const canSendEmail = computed(() => session.value?.status === 'open' && notifySchema.safeParse(emailPayload.value).success)
 const preview = computed(() => {
@@ -355,7 +444,8 @@ const preview = computed(() => {
   if (first) return { name: first.displayName, pending: first.pending }
   return { name: email.extras[0]?.displayName ?? 'Prénom Nom', pending: email.extras.length ? 0 : 1 }
 })
-const previewParagraphs = computed(() => messageParagraphs(email.message))
+const messageLength = computed(() => richPlainText(email.message).length)
+const signatureLength = computed(() => richPlainText(email.signature).length)
 function sendEmails() {
   const parsed = notifySchema.safeParse(emailPayload.value)
   if (!parsed.success) return
@@ -628,8 +718,11 @@ function sendEmails() {
           <UFormField label="Objet" required>
             <UInput v-model="email.subject" icon="i-lucide-text-cursor-input" class="w-full" :maxlength="200" />
           </UFormField>
-          <UFormField label="Message" required :hint="`${email.message.length}/5000`">
-            <UTextarea v-model="email.message" class="w-full" :rows="7" autoresize :maxlength="5000" />
+          <UFormField label="Message" required :hint="`${messageLength}/5000`">
+            <RichEditor v-model="email.message" label="Message" placeholder="Votre message…" />
+          </UFormField>
+          <UFormField label="Signature" :hint="`${signatureLength}/5000`" description="Ajoutée en fin d'email et enregistrée pour vos prochains envois.">
+            <RichEditor v-model="email.signature" label="Signature" placeholder="Collez votre signature ici (Cordialement, nom, téléphone…)" />
           </UFormField>
 
           <section class="space-y-2">
@@ -643,9 +736,8 @@ function sendEmails() {
                 <span class="font-semibold">{{ pendingSentence(preview.pending, session.name) }}</span><br>
                 <span class="text-primary underline">Accéder à mes vérifications</span>
               </p>
-              <p v-for="(lines, i) in previewParagraphs" :key="i">
-                <template v-for="(line, j) in lines" :key="j"><br v-if="j">{{ line }}</template>
-              </p>
+              <RichText :doc="email.message" />
+              <RichText v-if="!isEmptyDoc(email.signature)" :doc="email.signature" class="pt-3" />
             </div>
             <p class="text-xs text-muted">Le nombre de lignes et le lien vers ControleIT sont ajoutés à chaque email (sans nombre pour un destinataire ajouté). Envoi depuis la boîte du service informatique.</p>
           </section>

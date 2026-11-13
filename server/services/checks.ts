@@ -248,7 +248,7 @@ export async function markRemediationDone(db: Database, actor: Actor, remediatio
 /** Recherche de collaborateurs actifs pour l'assignation (nom, e-mail ou UPN). */
 export function searchUsers(db: Pick<Database, 'select'>, q: string) {
   const pattern = `%${q.replace(/[\\%_]/g, c => `\\${c}`)}%`
-  return db.select({ id: users.id, displayName: users.displayName, mail: users.mail, department: users.department })
+  return db.select({ id: users.id, displayName: users.displayName, mail: users.mail, userPrincipalName: users.userPrincipalName, department: users.department })
     .from(users)
     .where(and(eq(users.accountEnabled, true), or(ilike(users.displayName, pattern), ilike(users.mail, pattern), ilike(users.userPrincipalName, pattern))))
     .orderBy(users.displayName)

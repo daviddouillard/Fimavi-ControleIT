@@ -9,7 +9,8 @@ import { latestRun, runCollection, startCollection } from '../../server/services
 import { launchCollection, runCollectionById } from '../../server/services/collectionLauncher'
 import { notifySchema } from '../../shared/schemas/checks'
 import { syncDirectory } from '../../server/services/directory'
-import { assignmentEmail, sendAssignmentEmails, type MailMessage } from '../../server/services/notifications'
+import { assignmentEmail, getSignature, sendAssignmentEmails, type MailMessage } from '../../server/services/notifications'
+import { textToDoc } from '../../shared/richText'
 import { addConnection, addSite, deleteConnection, getSettings, saveDomains } from '../../server/services/settings'
 import type { Database } from '../../server/utils/db'
 import { createTestDb, seedSession, TEST_TENANT } from './helpers'
@@ -308,12 +309,12 @@ describe('emails aux valideurs', () => {
   it('reprend l\'objet et le message de l\'admin, échappés, et ajoute toujours le nombre de lignes et le lien', () => {
     const mail = assignmentEmail({
       recipientName: 'Jean', sessionName: 'Revue T4', pending: 3, appUrl: 'https://app.test',
-      subject: 'Merci de répondre', message: 'Bonjour à tous\n<img src=x onerror=alert(1)>\n\nDeuxième paragraphe'
+      subject: 'Merci de répondre', message: textToDoc('Bonjour à tous\n<img src=x onerror=alert(1)>\n\nDeuxième paragraphe')
     })
     expect(mail.subject).toBe('Merci de répondre')
     expect(mail.html).not.toContain('<img')
-    expect(mail.html).toContain('<p>Bonjour à tous<br>&lt;img src=x onerror=alert(1)&gt;</p>')
-    expect(mail.html).toContain('<p>Deuxième paragraphe</p>')
+    expect(mail.html).toContain('<p style="margin:0">Bonjour à tous</p><p style="margin:0">&lt;img src=x onerror=alert(1)&gt;</p><p style="margin:0">&nbsp;</p>')
+    expect(mail.html).toContain('<p style="margin:0">Deuxième paragraphe</p>')
     expect(mail.html).toContain('3 vérifications en attente')
     expect(mail.html).toContain('href="https://app.test"')
   })
@@ -321,11 +322,34 @@ describe('emails aux valideurs', () => {
   it('refuse un objet sur plusieurs lignes ou un message vide', () => {
     const base = { recipientIds: ['3f3f9c3d-d028-45c1-92f4-35e361d352b6'] }
     expect(notifySchema.safeParse({ ...base, subject: 'Objet\nBcc: x@y.z' }).success).toBe(false)
-    expect(notifySchema.safeParse({ ...base, message: '   ' }).success).toBe(false)
-    expect(notifySchema.safeParse({ ...base, subject: 'Objet', message: 'Texte' }).success).toBe(true)
+    expect(notifySchema.safeParse({ ...base, message: textToDoc('   ') }).success).toBe(false)
+    expect(notifySchema.safeParse({ ...base, message: '<p>HTML refusé</p>' }).success).toBe(false)
+    expect(notifySchema.safeParse({ ...base, subject: 'Objet', message: textToDoc('Texte') }).success).toBe(true)
+    // Signature vide acceptée (suppression de la signature).
+    expect(notifySchema.safeParse({ ...base, signature: textToDoc('') }).success).toBe(true)
     // Au moins un destinataire, valideur ou personne ajoutée.
     expect(notifySchema.safeParse({ recipientIds: [] }).success).toBe(false)
     expect(notifySchema.safeParse({ recipientIds: [], extraRecipientIds: base.recipientIds }).success).toBe(true)
+  })
+})
+
+describe('signature des emails', () => {
+  it('enregistre la signature de l\'expéditeur, l\'ajoute aux emails, puis la réutilise', async () => {
+    const s = await seedSession(db, 'open')
+    await assignItems(db, s.admin, s.session.id, { itemIds: [s.items[0]!.id], assigneeId: s.validator.id })
+    const sent: MailMessage[] = []
+    const mailer = async (m: MailMessage) => { sent.push(m) }
+    const signature = textToDoc('Cordialement,\nDavid')
+    await sendAssignmentEmails(db, s.admin, s.session.id, [s.validator.id], { mailer, appUrl: 'https://app.test', content: { signature } })
+    expect(await getSignature(db, s.admin.id)).toEqual(signature)
+    // Envoi sans signature transmise : la signature enregistrée est reprise.
+    await sendAssignmentEmails(db, s.admin, s.session.id, [s.validator.id], { mailer, appUrl: 'https://app.test' })
+    expect(sent).toHaveLength(2)
+    for (const mail of sent) expect(mail.html).toContain('<p style="margin:0">Cordialement,</p><p style="margin:0">David</p>')
+    // Signature effacée : plus de signature.
+    await sendAssignmentEmails(db, s.admin, s.session.id, [s.validator.id], { mailer, appUrl: 'https://app.test', content: { signature: textToDoc('') } })
+    expect(await getSignature(db, s.admin.id)).toBeNull()
+    expect(sent[2]!.html).not.toContain('Cordialement')
   })
 })
 

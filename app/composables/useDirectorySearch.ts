@@ -1,5 +1,5 @@
 /** Personne de l'annuaire synchronisé depuis Entra ID. */
-export interface DirectoryUser { id: string, displayName: string, mail: string | null, department: string | null }
+export interface DirectoryUser { id: string, displayName: string, mail: string | null, userPrincipalName?: string | null, department: string | null }
 
 /** Recherche dans l'annuaire à partir de 2 lettres (nom, email ou identifiant), avec temporisation. */
 export function useDirectorySearch() {
