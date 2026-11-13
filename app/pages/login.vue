@@ -53,11 +53,9 @@ const features = [
       <div class="flex flex-1 items-center justify-center px-6 pb-12 lg:p-12">
         <div class="w-full max-w-sm space-y-8">
           <div class="space-y-2">
-            <span class="inline-flex size-12 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20">
-              <UIcon name="i-lucide-shield-check" class="size-6 text-primary" />
-            </span>
-            <h2 class="text-3xl font-bold tracking-tight">Connexion à <span class="whitespace-nowrap">Contrôles <span class="text-primary">IT</span></span></h2>
-            <p class="text-muted">Utilisez votre compte professionnel Microsoft du groupe.</p>
+            <!-- Sur mobile, le panneau de gauche (titre) est masqué : le titre est repris ici. -->
+            <h1 class="text-3xl font-bold tracking-tight lg:hidden">Contrôles <span class="text-primary">IT</span> du groupe</h1>
+            <p class="text-lg text-muted">Utilisez votre compte professionnel Microsoft du groupe.</p>
           </div>
 
           <UAlert v-if="hasError" color="error" variant="subtle" icon="i-lucide-circle-alert" :title="errorText" />

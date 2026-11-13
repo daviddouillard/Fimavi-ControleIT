@@ -69,6 +69,6 @@ Aucun constat ouvert.
 
 ## Complément : libellés et message par défaut
 
-- Nom affiché en entier, « Contrôles IT », partout : page de connexion (« Contrôles IT du groupe » en titre), en-tête une fois connecté, objet des emails. L'abréviation « CTRL IT » est supprimée.
+- Nom affiché en entier, « Contrôles IT », partout : page de connexion (« Contrôles IT du groupe » en titre, sans titre ni icône répétés côté connexion), en-tête une fois connecté, objet des emails. L'abréviation « CTRL IT » est supprimée.
 - Message par défaut réécrit à la première personne (« Je vous ai confié… »). Il explique pourquoi on fait ce contrôle (« Pourquoi ? ») et ce qui est attendu (« Ce que je vous demande : »).
 - Textes uniquement, aucun impact sécurité. TNR : `npm run typecheck` OK, `npm run test` 102/102, `npm run test:e2e` 24/24.
