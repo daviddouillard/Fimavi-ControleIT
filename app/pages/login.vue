@@ -1,11 +1,11 @@
 <script setup lang="ts">
 definePageMeta({ layout: false })
-useHead({ title: 'Connexion — CTRL IT' })
+useHead({ title: 'Connexion — Contrôles IT' })
 
 const route = useRoute()
 const hasError = computed(() => route.query.error !== undefined)
 const errorText = computed(() => route.query.error === 'domain'
-  ? 'Votre compte n\'appartient pas à un domaine du groupe autorisé à utiliser CTRL IT. Contactez l\'IT.'
+  ? 'Votre compte n\'appartient pas à un domaine du groupe autorisé à utiliser Contrôles IT. Contactez l\'IT.'
   : 'La connexion a échoué. Réessayez ou contactez l\'IT.')
 
 const features = [
@@ -26,8 +26,7 @@ const features = [
 
       <div class="relative max-w-lg space-y-8">
         <div class="space-y-3">
-          <p class="text-sm font-medium uppercase tracking-[0.25em] text-primary">Contrôles IT du groupe</p>
-          <h1 class="text-6xl font-bold tracking-tight">CTRL <span class="text-primary">IT</span></h1>
+          <h1 class="text-6xl font-bold leading-tight tracking-tight">Contrôles <span class="text-primary">IT</span><br>du groupe</h1>
           <p class="text-lg text-neutral-300">Revue des accès externes, validation et remédiation, au même endroit.</p>
         </div>
         <ul class="space-y-5">
@@ -57,7 +56,7 @@ const features = [
             <span class="inline-flex size-12 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20">
               <UIcon name="i-lucide-shield-check" class="size-6 text-primary" />
             </span>
-            <h2 class="text-3xl font-bold tracking-tight">Connexion à <span class="whitespace-nowrap">CTRL <span class="text-primary">IT</span></span></h2>
+            <h2 class="text-3xl font-bold tracking-tight">Connexion à <span class="whitespace-nowrap">Contrôles <span class="text-primary">IT</span></span></h2>
             <p class="text-muted">Utilisez votre compte professionnel Microsoft du groupe.</p>
           </div>
 

@@ -334,9 +334,10 @@ describe('emails aux valideurs', () => {
 describe('corps de l\'email par défaut', () => {
   it('contient le message puis la signature, dans un seul corps', () => {
     const mail = assignmentEmail({ recipientName: 'Jean', sessionName: 'Revue T4', pending: 1, appUrl: 'https://app.test' })
-    expect(mail.html).toContain('partages externes SharePoint à vérifier')
+    expect(mail.html).toContain('Je vous ai confié des partages externes SharePoint à vérifier')
+    expect(mail.html).toContain('<strong>Pourquoi ?</strong> Un partage n&#39;expire pas tout seul')
     expect(mail.html).toContain('<p style="margin:0">Cordialement,</p><p style="margin:0"><strong>David DOUILLARD</strong></p>')
-    expect(mail.html.indexOf('à vérifier.')).toBeLessThan(mail.html.indexOf('Cordialement'))
+    expect(mail.html.indexOf('Merci par avance')).toBeLessThan(mail.html.indexOf('Cordialement'))
   })
 
   it('remplace [Prénom Nom] et [Vérifications en attente] pour chaque destinataire et joint la bannière', () => {

@@ -108,7 +108,7 @@ test('l\'admin ne peut pas envoyer les emails sans messagerie configurée', asyn
   await body.click()
   await page.keyboard.press('ControlOrMeta+a')
   await dialog.getByRole('button', { name: 'Italique' }).click()
-  await expect(body.locator('em', { hasText: 'Le service informatique vous a confié' })).toBeVisible()
+  await expect(body.locator('em', { hasText: 'Je vous ai confié des partages externes' })).toBeVisible()
   // Ajout d'un destinataire par recherche dans l'annuaire, puis retrait possible.
   await dialog.getByRole('button', { name: /Ajouter un destinataire/ }).click()
   await page.keyboard.type('ma')

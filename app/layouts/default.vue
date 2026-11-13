@@ -25,9 +25,9 @@ async function logout() {
   <div class="min-h-screen bg-default">
     <header v-if="loggedIn" class="border-b border-default">
       <UContainer class="flex max-w-[1920px] items-center justify-between gap-4 py-3">
-        <NuxtLink to="/" class="flex shrink-0 items-center gap-3" aria-label="CTRL IT — accueil">
+        <NuxtLink to="/" class="flex shrink-0 items-center gap-3" aria-label="Contrôles IT — accueil">
           <img src="/logo-fimavi.png" alt="Groupe Fimavi" class="h-9 w-auto rounded">
-          <span class="text-lg font-bold tracking-tight">CTRL <span class="text-primary">IT</span></span>
+          <span class="whitespace-nowrap text-lg font-bold tracking-tight">Contrôles <span class="text-primary">IT</span></span>
         </NuxtLink>
         <UNavigationMenu :items="links" class="flex-1" />
         <div class="flex items-center gap-2">

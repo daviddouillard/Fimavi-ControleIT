@@ -47,7 +47,7 @@ Aucun constat ouvert.
   - suppression de la signature enregistrée par administrateur (route `GET /api/admin/me/signature` retirée, colonne supprimée par la migration `0005_drop_email_signature`) ;
   - le corps reste validé puis converti en HTML par le serveur selon les mêmes règles (liste fermée de styles, texte échappé).
 - **Page de connexion** :
-  - deux panneaux : présentation « CTRL IT » avec le logo du groupe Fimavi, et bouton « Se connecter avec Microsoft » avec le logo Microsoft (SVG local) ;
+  - deux panneaux : présentation « Contrôles IT du groupe » avec le logo du groupe Fimavi, et bouton « Se connecter avec Microsoft » avec le logo Microsoft (SVG local) ;
   - le lien pointe toujours vers `/auth/microsoft` (flux OIDC inchangé) ;
   - logo Fimavi (`public/logo-fimavi.png`, extrait de la signature email) affiché aussi en haut à gauche de l'en-tête une fois connecté ;
   - aucune ressource externe, CSP inchangée.
@@ -66,3 +66,9 @@ Aucun constat ouvert.
   - aucun HTML saisi n'est accepté : « mode HTML » s'entend comme un email HTML produit par le serveur, pas comme une saisie de HTML brut, qui ouvrirait une injection dans les emails envoyés depuis helpdesk.
   - Tests : champs remplacés et échappés, lien non dupliqué, image jointe, images étrangères ignorées.
 - **TNR** : `npm run typecheck` OK, `npm run test` 102/102, `npm run test:e2e` 24/24. `npm audit --omit=dev` : inchangé.
+
+## Complément : libellés et message par défaut
+
+- Nom affiché en entier, « Contrôles IT », partout : page de connexion (« Contrôles IT du groupe » en titre), en-tête une fois connecté, objet des emails. L'abréviation « CTRL IT » est supprimée.
+- Message par défaut réécrit à la première personne (« Je vous ai confié… »). Il explique pourquoi on fait ce contrôle (« Pourquoi ? ») et ce qui est attendu (« Ce que je vous demande : »).
+- Textes uniquement, aucun impact sécurité. TNR : `npm run typecheck` OK, `npm run test` 102/102, `npm run test:e2e` 24/24.
