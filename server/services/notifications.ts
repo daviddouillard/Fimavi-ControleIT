@@ -5,13 +5,15 @@ import { checkItems, controlSessions, notifications, users } from '../db/schema'
 import { recordAudit } from '../utils/audit'
 import type { Database } from '../utils/db'
 import { defaultEmailDoc, defaultEmailSubject, pendingSentence } from '../../shared/emails'
-import { richToHtml, type RichNode } from '../../shared/richText'
+import { FIELD_NAME, FIELD_PENDING, richPlainText, richToHtml, usedInlineImages, type RichNode } from '../../shared/richText'
 import type { Actor } from './checks'
 
 export interface MailMessage {
   to: string
   subject: string
   html: string
+  /** Images intégrées (cid) référencées dans le HTML, jointes par le mailer depuis la liste fermée du serveur. */
+  inlineImages?: string[]
 }
 
 export type Mailer = (message: MailMessage) => Promise<void>
@@ -71,18 +73,19 @@ export interface EmailContent {
 }
 
 /**
- * Email d'un valideur : « Bonjour <nom>, », nombre de lignes en attente et lien vers l'application (toujours
- * ajoutés), puis le corps rédigé par l'admin (signature comprise). Le HTML est produit par richToHtml (texte échappé, styles vérifiés).
+ * Email d'un destinataire : le corps rédigé par l'admin (salutation, message, signature et bannière), où les champs
+ * [Prénom Nom] et [Vérifications en attente] sont remplacés pour chaque destinataire. Le nombre de lignes et le lien
+ * vers l'application sont toujours présents : sans le champ, ils sont ajoutés en tête. HTML produit par richToHtml.
  */
 export function assignmentEmail(input: { recipientName: string, sessionName: string, pending: number, appUrl: string } & EmailContent): Omit<MailMessage, 'to'> {
+  const body = input.message ?? defaultEmailDoc()
+  const pendingHtml = `<strong>${escapeHtml(pendingSentence(input.pending, input.sessionName))}</strong><br>`
+    + `<a href="${escapeHtml(input.appUrl)}">Accéder à mes vérifications</a>`
+  const html = richToHtml(body, { [FIELD_NAME]: escapeHtml(input.recipientName), [FIELD_PENDING]: pendingHtml })
   return {
     subject: input.subject ?? defaultEmailSubject(input.sessionName),
-    html: [
-      `<p>Bonjour ${escapeHtml(input.recipientName)},</p>`,
-      `<p><strong>${escapeHtml(pendingSentence(input.pending, input.sessionName))}</strong><br>`
-        + `<a href="${escapeHtml(input.appUrl)}">Accéder à mes vérifications</a></p>`,
-      `<div>${richToHtml(input.message ?? defaultEmailDoc())}</div>`
-    ].join('\n')
+    html: richPlainText(body).includes(FIELD_PENDING) ? `<div>${html}</div>` : `<p>${pendingHtml}</p>\n<div>${html}</div>`,
+    inlineImages: usedInlineImages(body)
   }
 }
 

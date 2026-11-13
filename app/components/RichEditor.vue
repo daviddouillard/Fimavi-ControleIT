@@ -5,7 +5,7 @@ import { BackgroundColor, Color, TextStyle } from '@tiptap/extension-text-style'
 import type { RichNode } from '#shared/richText'
 
 /**
- * Éditeur de texte mis en forme (gras, italique, souligné, couleur, surlignage, listes).
+ * Éditeur de texte mis en forme (gras, italique, souligné, couleur, surlignage, listes, bannière de signature).
  * Produit un document JSON : le serveur le revalide et fabrique lui-même le HTML des emails.
  */
 const model = defineModel<RichNode>({ required: true })
@@ -71,6 +71,7 @@ function toolbar(editor: Editor): EditorToolbarItem[][] {
     [
       { kind: 'bulletList', icon: 'i-lucide-list', tooltip: { text: 'Liste à puces' }, 'aria-label': 'Liste à puces' },
       { kind: 'orderedList', icon: 'i-lucide-list-ordered', tooltip: { text: 'Liste numérotée' }, 'aria-label': 'Liste numérotée' },
+      { 'icon': 'i-lucide-image', 'tooltip': { text: 'Insérer la bannière Fimavi' }, 'aria-label': 'Insérer la bannière Fimavi', 'onClick': () => editor.chain().focus().setImage({ src: '/signature-fimavi.jpg', alt: 'Groupe Fimavi' }).run() },
       { kind: 'clearFormatting', icon: 'i-lucide-remove-formatting', tooltip: { text: 'Effacer la mise en forme' }, 'aria-label': 'Effacer la mise en forme' }
     ]
   ] as EditorToolbarItem[][]
@@ -84,7 +85,7 @@ function toolbar(editor: Editor): EditorToolbarItem[][] {
     content-type="json"
     :extensions="extensions"
     :starter-kit="starterKit"
-    :image="false"
+    :image="{ allowBase64: false, HTMLAttributes: { class: 'my-1 h-auto max-w-[600px] w-full' } }"
     :mention="false"
     :placeholder="placeholder"
     :aria-label="label"

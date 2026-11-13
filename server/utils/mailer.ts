@@ -1,6 +1,7 @@
 import { createError, useRuntimeConfig } from 'nuxt/server'
 import type { Mailer } from '../services/notifications'
 import { graphClient, GraphError } from './graph'
+import { INLINE_IMAGE_FILES } from './inlineImages'
 import { homeTenant } from './tenants'
 
 /**
@@ -11,10 +12,15 @@ export function graphMailer(): Mailer {
   const sender = useRuntimeConfig().mailSender
   if (!sender) throw createError({ status: 503, message: 'Messagerie non configurée (NUXT_MAIL_SENDER)' })
   const graph = graphClient(homeTenant())
-  return async ({ to, subject, html }) => {
+  return async ({ to, subject, html, inlineImages = [] }) => {
+    // Images intégrées (signature) : pièces jointes « inline » issues de la liste fermée du serveur.
+    const attachments = inlineImages.flatMap((cid) => {
+      const file = INLINE_IMAGE_FILES[cid]
+      return file ? [{ '@odata.type': '#microsoft.graph.fileAttachment', 'name': file.name, 'contentType': file.contentType, 'contentBytes': file.contentBytes, 'contentId': cid, 'isInline': true }] : []
+    })
     try {
       await graph.post(`users/${encodeURIComponent(sender)}/sendMail`, {
-        message: { subject, body: { contentType: 'HTML', content: html }, toRecipients: [{ emailAddress: { address: to } }] },
+        message: { subject, body: { contentType: 'HTML', content: html }, toRecipients: [{ emailAddress: { address: to } }], ...(attachments.length ? { attachments } : {}) },
         saveToSentItems: true
       })
     } catch (error) {

@@ -53,3 +53,16 @@ Aucun constat ouvert.
   - aucune ressource externe, CSP inchangée.
 - **TNR** : `npm run typecheck` OK, `npm run test` 100/100, `npm run test:e2e` 24/24.
 - **Note** : la signature par défaut contient le nom, le téléphone et l'adresse email de David DOUILLARD, à sa demande. Les autres administrateurs la remplacent dans le corps avant l'envoi.
+
+## Complément : bannière de signature et salutation dans le corps
+
+- **Salutation et champs** : le corps commence par `Bonjour [Prénom Nom],` puis `[Vérifications en attente]`. À l'envoi, ces champs sont remplacés pour chaque destinataire : nom échappé ; phrase du nombre de lignes et lien vers l'application, produits par le serveur. Si l'admin retire `[Vérifications en attente]`, la phrase et le lien sont ajoutés en tête : le lien est toujours présent.
+- **Bannière Fimavi** (image de la signature d'origine) :
+  - affichée dans l'éditeur depuis `public/signature-fimavi.jpg` ; un bouton de la barre d'outils permet de la réinsérer ;
+  - envoyée en **pièce jointe intégrée** (`cid:signature-fimavi`, Graph `fileAttachment` avec `isInline`), affichée par Outlook sans téléchargement externe.
+- **Sécurité** :
+  - **liste fermée** d'images (`INLINE_IMAGES`, contenu embarqué dans le serveur, `server/utils/inlineImages.ts`) ;
+  - toute autre image du document (URL externe, `data:`) est ignorée à l'envoi, et les images collées en base64 sont refusées par l'éditeur ;
+  - aucun HTML saisi n'est accepté : « mode HTML » s'entend comme un email HTML produit par le serveur, pas comme une saisie de HTML brut, qui ouvrirait une injection dans les emails envoyés depuis helpdesk.
+  - Tests : champs remplacés et échappés, lien non dupliqué, image jointe, images étrangères ignorées.
+- **TNR** : `npm run typecheck` OK, `npm run test` 102/102, `npm run test:e2e` 24/24. `npm audit --omit=dev` : inchangé.

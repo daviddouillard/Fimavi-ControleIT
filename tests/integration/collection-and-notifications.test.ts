@@ -338,6 +338,29 @@ describe('corps de l\'email par défaut', () => {
     expect(mail.html).toContain('<p style="margin:0">Cordialement,</p><p style="margin:0"><strong>David DOUILLARD</strong></p>')
     expect(mail.html.indexOf('à vérifier.')).toBeLessThan(mail.html.indexOf('Cordialement'))
   })
+
+  it('remplace [Prénom Nom] et [Vérifications en attente] pour chaque destinataire et joint la bannière', () => {
+    const mail = assignmentEmail({ recipientName: 'Jean <Dupont>', sessionName: 'Revue T4', pending: 2, appUrl: 'https://app.test' })
+    expect(mail.html).toContain('<p style="margin:0">Bonjour Jean &lt;Dupont&gt;,</p>')
+    expect(mail.html).toContain('<strong>Vous avez 2 vérifications en attente dans la campagne « Revue T4 ».</strong><br><a href="https://app.test">Accéder à mes vérifications</a>')
+    expect(mail.html).not.toContain('[Prénom Nom]')
+    expect(mail.html).not.toContain('[Vérifications en attente]')
+    // Le lien n'est pas ajouté une seconde fois quand le champ est présent.
+    expect(mail.html.split('Accéder à mes vérifications')).toHaveLength(2)
+    expect(mail.html).toContain('<img src="cid:signature-fimavi"')
+    expect(mail.inlineImages).toEqual(['signature-fimavi'])
+  })
+
+  it('ignore toute image hors de la liste fermée', () => {
+    const message = { type: 'doc', content: [
+      { type: 'paragraph', content: [{ type: 'text', text: 'Texte' }] },
+      { type: 'image', attrs: { src: 'https://evil.test/pixel.png' } },
+      { type: 'image', attrs: { src: 'data:image/png;base64,AAAA' } }
+    ] }
+    const mail = assignmentEmail({ recipientName: 'Jean', sessionName: 'Revue', pending: 1, appUrl: 'https://app.test', message })
+    expect(mail.html).not.toContain('<img')
+    expect(mail.inlineImages).toEqual([])
+  })
 })
 
 describe('paramètres et annuaire multi-tenant', () => {

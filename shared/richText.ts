@@ -87,8 +87,31 @@ export function textFormat(marks: RichMark[] = []): TextFormat {
   return format
 }
 
+/**
+ * Images autorisées dans un email : liste fermée d'images fournies par l'application (affichées dans l'éditeur
+ * depuis /public, envoyées en pièce jointe intégrée référencée par cid:). Toute autre image est ignorée.
+ */
+export const INLINE_IMAGES: Record<string, { cid: string, alt: string, width: number, height: number }> = {
+  '/signature-fimavi.jpg': { cid: 'signature-fimavi', alt: 'Groupe Fimavi — faire grandir, durablement — www.fimavi.com', width: 600, height: 61 }
+}
+export const inlineImage = (node: RichNode) => node.type === 'image' && typeof node.attrs?.src === 'string' ? INLINE_IMAGES[node.attrs.src] : undefined
+
+/** Images intégrées utilisées par un document (identifiants cid). */
+export function usedInlineImages(node: RichNode, found = new Set<string>()): string[] {
+  const image = inlineImage(node)
+  if (image) found.add(image.cid)
+  for (const child of node.content ?? []) usedInlineImages(child, found)
+  return [...found]
+}
+
+/**
+ * Champs remplacés à l'envoi, pour chaque destinataire. Ils restent visibles et déplaçables dans le corps du message.
+ */
+export const FIELD_NAME = '[Prénom Nom]'
+export const FIELD_PENDING = '[Vérifications en attente]'
+
 /** Blocs reconnus ; un nœud inconnu est rendu comme un simple conteneur de son contenu. */
-export type BlockKind = 'p' | 'ul' | 'ol' | 'li' | 'br' | 'text' | 'container'
+export type BlockKind = 'p' | 'ul' | 'ol' | 'li' | 'br' | 'img' | 'text' | 'container'
 export function blockKind(node: RichNode): BlockKind {
   switch (node.type) {
     case 'paragraph': case 'heading': case 'blockquote': return 'p'
@@ -96,6 +119,7 @@ export function blockKind(node: RichNode): BlockKind {
     case 'orderedList': return 'ol'
     case 'listItem': return 'li'
     case 'hardBreak': return 'br'
+    case 'image': return 'img'
     case 'text': return 'text'
     default: return 'container'
   }
@@ -103,9 +127,13 @@ export function blockKind(node: RichNode): BlockKind {
 
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' })[c]!)
 
-function textHtml(node: RichNode): string {
+/** Remplacements à l'envoi : champ → HTML produit par le serveur (le nom du destinataire y est déjà échappé). */
+export type Fields = Record<string, string>
+
+function textHtml(node: RichNode, fields: Fields): string {
   const f = textFormat(node.marks)
   let html = escapeHtml(node.text ?? '')
+  for (const [field, value] of Object.entries(fields)) html = html.split(escapeHtml(field)).join(value)
   if (f.bold) html = `<strong>${html}</strong>`
   if (f.italic) html = `<em>${html}</em>`
   if (f.underline) html = `<u>${html}</u>`
@@ -117,11 +145,15 @@ function textHtml(node: RichNode): string {
 }
 
 /** HTML d'email d'un document validé (construit ici, jamais repris de l'entrée). */
-export function richToHtml(node: RichNode, level = 0): string {
+export function richToHtml(node: RichNode, fields: Fields = {}, level = 0): string {
   if (level > MAX_DEPTH) return ''
-  const inner = () => (node.content ?? []).map(child => richToHtml(child, level + 1)).join('')
+  const inner = () => (node.content ?? []).map(child => richToHtml(child, fields, level + 1)).join('')
   switch (blockKind(node)) {
-    case 'text': return textHtml(node)
+    case 'text': return textHtml(node, fields)
+    case 'img': {
+      const image = inlineImage(node)
+      return image ? `<p style="margin:0"><img src="cid:${image.cid}" alt="${escapeHtml(image.alt)}" width="${image.width}" height="${image.height}" style="display:block;max-width:100%;height:auto;border:0"></p>` : ''
+    }
     case 'br': return '<br>'
     case 'p': return `<p style="margin:0">${inner() || '&nbsp;'}</p>`
     case 'ul': return `<ul style="margin:0">${inner()}</ul>`
