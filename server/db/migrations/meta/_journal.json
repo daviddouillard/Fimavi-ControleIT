@@ -36,6 +36,13 @@
       "when": 1794578253455,
       "tag": "0004_email_signature",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794580518184,
+      "tag": "0005_drop_email_signature",
+      "breakpoints": true
     }
   ]
 }

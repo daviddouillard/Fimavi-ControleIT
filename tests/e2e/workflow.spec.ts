@@ -98,15 +98,15 @@ test('l\'admin ne peut pas envoyer les emails sans messagerie configurée', asyn
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByRole('checkbox', { name: 'Envoyer l\'email à Valérie Valideuse' })).toBeChecked()
   await expect(dialog.getByRole('textbox').first()).toHaveValue(/partages externes à vérifier/)
-  // Mise en forme du message (gras) et signature, visibles dans l'aperçu.
-  const editors = dialog.locator('.ProseMirror')
-  await editors.first().click()
+  // Un seul corps : message et signature, modifiables et mis en forme (gras).
+  const body = dialog.locator('.ProseMirror')
+  await expect(body).toHaveCount(1)
+  await expect(body).toContainText('Cordialement,')
+  await expect(body).toContainText('David DOUILLARD')
+  await body.click()
   await page.keyboard.press('ControlOrMeta+a')
-  await dialog.getByRole('button', { name: 'Gras' }).first().click()
-  await expect(dialog.locator('span.font-semibold', { hasText: 'Le service informatique vous a confié' })).toBeVisible()
-  await editors.nth(1).click()
-  await page.keyboard.type('Cordialement, Équipe IT')
-  await expect(dialog.getByText('Cordialement, Équipe IT')).toHaveCount(2)
+  await dialog.getByRole('button', { name: 'Italique' }).click()
+  await expect(body.locator('em', { hasText: 'Le service informatique vous a confié' })).toBeVisible()
   // Ajout d'un destinataire par recherche dans l'annuaire, puis retrait possible.
   await dialog.getByRole('button', { name: /Ajouter un destinataire/ }).click()
   await page.keyboard.type('ma')

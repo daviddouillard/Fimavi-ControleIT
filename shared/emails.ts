@@ -1,4 +1,4 @@
-import { textToDoc } from './richText'
+import { textToDoc, type RichNode } from './richText'
 
 /** Email « vous avez des vérifications à faire » : textes par défaut, modifiables par l'admin avant envoi. */
 
@@ -9,12 +9,24 @@ export const DEFAULT_EMAIL_MESSAGE = [
   '',
   'Pour chaque ligne, indiquez si le partage doit être conservé ou arrêté, ou signalez qu\'il ne vous concerne pas. Un commentaire est demandé à chaque réponse.',
   '',
-  'Merci,',
-  'Le service informatique'
+  'Merci par avance de votre retour.',
+  ''
 ].join('\n')
 
-/** Message par défaut sous forme de document de l'éditeur. */
-export const defaultEmailDoc = () => textToDoc(DEFAULT_EMAIL_MESSAGE)
+/** Signature intégrée au message par défaut (modifiable dans le corps du message avant chaque envoi). */
+const DEFAULT_SIGNATURE: RichNode[] = [
+  { type: 'paragraph', content: [{ type: 'text', text: 'Cordialement,' }] },
+  { type: 'paragraph', content: [{ type: 'text', text: 'David DOUILLARD', marks: [{ type: 'bold' }] }] },
+  { type: 'paragraph', content: [{ type: 'text', text: '06 59 54 45 10' }] },
+  { type: 'paragraph', content: [{ type: 'text', text: 'Email : david.douillard@fimavi.com' }] },
+  { type: 'paragraph', content: [{ type: 'text', text: 'Fimavi', marks: [{ type: 'bold' }] }, { type: 'text', text: ' Rue verte, ZI de LADOUX 63118 CEBAZAT' }] }
+]
+
+/** Corps par défaut de l'email : message puis signature, dans un seul document de l'éditeur. */
+export const defaultEmailDoc = (): RichNode => {
+  const message = textToDoc(DEFAULT_EMAIL_MESSAGE)
+  return { type: 'doc', content: [...(message.content ?? []), ...structuredClone(DEFAULT_SIGNATURE)] }
+}
 
 /**
  * Phrase ajoutée automatiquement à chaque email, avec le nombre de lignes du destinataire.

@@ -1,5 +1,4 @@
 import { sql } from 'drizzle-orm'
-import type { RichNode } from '../../shared/richText'
 import { bigserial, boolean, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 
 export const sessionStatus = pgEnum('session_status', ['draft', 'open', 'closed'])
@@ -23,8 +22,6 @@ export const users = pgTable('users', {
   department: text('department'),
   accountEnabled: boolean('account_enabled').notNull().default(true),
   lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
-  /** Signature des emails envoyés par cet administrateur (document de l'éditeur, voir shared/richText.ts). */
-  emailSignature: jsonb('email_signature').$type<RichNode>(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
 }, t => [
   uniqueIndex('users_tenant_entra_id_uq').on(t.tenantId, t.entraId),

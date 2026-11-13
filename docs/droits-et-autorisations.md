@@ -106,7 +106,7 @@ La gestion des administrateurs se fait **uniquement par le groupe** : ajouter ou
 | | Consulter toutes les lignes, avec tris et filtres | ✅ | ❌ |
 | | Assigner des lignes à un valideur (recherche dans l'annuaire, directement dans le tableau ou d'un clic sur l'auteur / le N+1) | ✅ | ❌ |
 | | Clôturer une ligne sans validation | ✅ | ❌ |
-| | Préparer et envoyer les emails (message mis en forme, signature personnelle), relancer, ajouter des destinataires de l'annuaire | ✅ | ❌ |
+| | Préparer et envoyer les emails (corps unique mis en forme, signature comprise), relancer, ajouter des destinataires de l'annuaire | ✅ | ❌ |
 | **Historique** | Toutes les sessions, y compris clôturées, et le journal d'audit | ✅ | ❌ |
 | **Paramètres** | Domaines internes du groupe | ✅ | ❌ |
 | | Tenants raccordés (ajout, activation, lien de consentement) | ✅ | ❌ |

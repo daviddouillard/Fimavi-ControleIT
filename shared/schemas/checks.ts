@@ -35,11 +35,9 @@ export const notifySchema = z.object({
   recipientIds: z.array(z.uuid()).max(100).transform(ids => [...new Set(ids)]),
   /** Personnes de l'annuaire ajoutées à la main par l'admin (même email, sans compteur de lignes). */
   extraRecipientIds: z.array(z.uuid()).max(20).default([]).transform(ids => [...new Set(ids)]),
-  /** Objet et message modifiables par l'admin. Message et signature : documents de l'éditeur, convertis en HTML par le serveur. */
+  /** Objet et message modifiables par l'admin. Message (signature comprise) : document de l'éditeur, converti en HTML par le serveur. */
   subject: z.string().trim().min(1, 'L\'objet est obligatoire').max(200).refine(v => !/[\r\n]/.test(v), 'Objet sur une seule ligne').optional(),
-  message: richDocSchema().optional(),
-  /** Signature de l'admin : enregistrée pour ses prochains envois (vide = aucune signature). */
-  signature: richDocSchema({ allowEmpty: true }).optional()
+  message: richDocSchema().optional()
 }).refine(v => v.recipientIds.length + v.extraRecipientIds.length > 0, { message: 'Choisissez au moins un destinataire', path: ['recipientIds'] })
 
 export const userSearchSchema = z.object({

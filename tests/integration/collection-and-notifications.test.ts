@@ -9,7 +9,7 @@ import { latestRun, runCollection, startCollection } from '../../server/services
 import { launchCollection, runCollectionById } from '../../server/services/collectionLauncher'
 import { notifySchema } from '../../shared/schemas/checks'
 import { syncDirectory } from '../../server/services/directory'
-import { assignmentEmail, getSignature, sendAssignmentEmails, type MailMessage } from '../../server/services/notifications'
+import { assignmentEmail, sendAssignmentEmails, type MailMessage } from '../../server/services/notifications'
 import { textToDoc } from '../../shared/richText'
 import { addConnection, addSite, deleteConnection, getSettings, saveDomains } from '../../server/services/settings'
 import type { Database } from '../../server/utils/db'
@@ -325,31 +325,18 @@ describe('emails aux valideurs', () => {
     expect(notifySchema.safeParse({ ...base, message: textToDoc('   ') }).success).toBe(false)
     expect(notifySchema.safeParse({ ...base, message: '<p>HTML refusé</p>' }).success).toBe(false)
     expect(notifySchema.safeParse({ ...base, subject: 'Objet', message: textToDoc('Texte') }).success).toBe(true)
-    // Signature vide acceptée (suppression de la signature).
-    expect(notifySchema.safeParse({ ...base, signature: textToDoc('') }).success).toBe(true)
     // Au moins un destinataire, valideur ou personne ajoutée.
     expect(notifySchema.safeParse({ recipientIds: [] }).success).toBe(false)
     expect(notifySchema.safeParse({ recipientIds: [], extraRecipientIds: base.recipientIds }).success).toBe(true)
   })
 })
 
-describe('signature des emails', () => {
-  it('enregistre la signature de l\'expéditeur, l\'ajoute aux emails, puis la réutilise', async () => {
-    const s = await seedSession(db, 'open')
-    await assignItems(db, s.admin, s.session.id, { itemIds: [s.items[0]!.id], assigneeId: s.validator.id })
-    const sent: MailMessage[] = []
-    const mailer = async (m: MailMessage) => { sent.push(m) }
-    const signature = textToDoc('Cordialement,\nDavid')
-    await sendAssignmentEmails(db, s.admin, s.session.id, [s.validator.id], { mailer, appUrl: 'https://app.test', content: { signature } })
-    expect(await getSignature(db, s.admin.id)).toEqual(signature)
-    // Envoi sans signature transmise : la signature enregistrée est reprise.
-    await sendAssignmentEmails(db, s.admin, s.session.id, [s.validator.id], { mailer, appUrl: 'https://app.test' })
-    expect(sent).toHaveLength(2)
-    for (const mail of sent) expect(mail.html).toContain('<p style="margin:0">Cordialement,</p><p style="margin:0">David</p>')
-    // Signature effacée : plus de signature.
-    await sendAssignmentEmails(db, s.admin, s.session.id, [s.validator.id], { mailer, appUrl: 'https://app.test', content: { signature: textToDoc('') } })
-    expect(await getSignature(db, s.admin.id)).toBeNull()
-    expect(sent[2]!.html).not.toContain('Cordialement')
+describe('corps de l\'email par défaut', () => {
+  it('contient le message puis la signature, dans un seul corps', () => {
+    const mail = assignmentEmail({ recipientName: 'Jean', sessionName: 'Revue T4', pending: 1, appUrl: 'https://app.test' })
+    expect(mail.html).toContain('partages externes SharePoint à vérifier')
+    expect(mail.html).toContain('<p style="margin:0">Cordialement,</p><p style="margin:0"><strong>David DOUILLARD</strong></p>')
+    expect(mail.html.indexOf('à vérifier.')).toBeLessThan(mail.html.indexOf('Cordialement'))
   })
 })
 

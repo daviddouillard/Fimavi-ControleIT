@@ -3,8 +3,8 @@ import type { TableColumn } from '@nuxt/ui'
 import ShareAuthor from '~/components/ShareAuthor.vue'
 import ShareBeneficiary from '~/components/ShareBeneficiary.vue'
 import ShareResource from '~/components/ShareResource.vue'
-import { defaultEmailDoc, defaultEmailSubject, pendingSentence } from '#shared/emails'
-import { isEmptyDoc, richPlainText, textToDoc, type RichNode } from '#shared/richText'
+import { defaultEmailDoc, defaultEmailSubject } from '#shared/emails'
+import { richPlainText, type RichNode } from '#shared/richText'
 import { notifySchema } from '#shared/schemas/checks'
 import type { DirectoryUser } from '~/composables/useDirectorySearch'
 
@@ -397,15 +397,12 @@ function relaunch() {
 const pendingAssignees = computed(() => (data.value?.assignees ?? []).filter(a => a.pending > 0))
 const answeredAssignees = computed(() => (data.value?.assignees ?? []).filter(a => a.pending === 0))
 const emailOpen = ref(false)
-const email = reactive<{ recipientIds: string[], extras: DirectoryUser[], subject: string, message: RichNode, signature: RichNode }>({ recipientIds: [], extras: [], subject: '', message: defaultEmailDoc(), signature: textToDoc('') })
-async function openEmail() {
+const email = reactive<{ recipientIds: string[], extras: DirectoryUser[], subject: string, message: RichNode }>({ recipientIds: [], extras: [], subject: '', message: defaultEmailDoc() })
+function openEmail() {
   email.recipientIds = pendingAssignees.value.map(a => a.id)
   email.extras = []
   email.subject = defaultEmailSubject(session.value?.name ?? '')
   email.message = defaultEmailDoc()
-  // Signature enregistrée lors du dernier envoi de cet administrateur.
-  const saved = await $fetch('/api/admin/me/signature').catch(() => null)
-  email.signature = saved?.signature ?? textToDoc('')
   emailOpen.value = true
 }
 function toggleRecipient(userId: string, checked: boolean) {
@@ -435,17 +432,10 @@ const emailPayload = computed(() => ({
   recipientIds: email.recipientIds,
   extraRecipientIds: email.extras.map(e => e.id),
   subject: email.subject,
-  message: email.message,
-  signature: email.signature
+  message: email.message
 }))
 const canSendEmail = computed(() => session.value?.status === 'open' && notifySchema.safeParse(emailPayload.value).success)
-const preview = computed(() => {
-  const first = pendingAssignees.value.find(a => email.recipientIds.includes(a.id))
-  if (first) return { name: first.displayName, pending: first.pending }
-  return { name: email.extras[0]?.displayName ?? 'Prénom Nom', pending: email.extras.length ? 0 : 1 }
-})
 const messageLength = computed(() => richPlainText(email.message).length)
-const signatureLength = computed(() => richPlainText(email.signature).length)
 function sendEmails() {
   const parsed = notifySchema.safeParse(emailPayload.value)
   if (!parsed.success) return
@@ -718,29 +708,15 @@ function sendEmails() {
           <UFormField label="Objet" required>
             <UInput v-model="email.subject" icon="i-lucide-text-cursor-input" class="w-full" :maxlength="200" />
           </UFormField>
-          <UFormField label="Message" required :hint="`${messageLength}/5000`">
+          <UFormField
+            label="Message"
+            required
+            :hint="`${messageLength}/5000`"
+            description="Message et signature, modifiables à votre guise. Chaque email commence automatiquement par « Bonjour <nom>, », le nombre de lignes en attente et le lien vers ControleIT."
+          >
             <RichEditor v-model="email.message" label="Message" placeholder="Votre message…" />
           </UFormField>
-          <UFormField label="Signature" :hint="`${signatureLength}/5000`" description="Ajoutée en fin d'email et enregistrée pour vos prochains envois.">
-            <RichEditor v-model="email.signature" label="Signature" placeholder="Collez votre signature ici (Cordialement, nom, téléphone…)" />
-          </UFormField>
-
-          <section class="space-y-2">
-            <h3 class="flex items-center gap-2 text-sm font-medium">
-              <UIcon name="i-lucide-eye" class="size-4" /> Aperçu pour {{ preview.name }}
-            </h3>
-            <div class="space-y-3 rounded-lg border border-default bg-elevated/50 p-4 text-sm">
-              <p class="font-medium">{{ email.subject }}</p>
-              <p>Bonjour {{ preview.name }},</p>
-              <p>
-                <span class="font-semibold">{{ pendingSentence(preview.pending, session.name) }}</span><br>
-                <span class="text-primary underline">Accéder à mes vérifications</span>
-              </p>
-              <RichText :doc="email.message" />
-              <RichText v-if="!isEmptyDoc(email.signature)" :doc="email.signature" class="pt-3" />
-            </div>
-            <p class="text-xs text-muted">Le nombre de lignes et le lien vers ControleIT sont ajoutés à chaque email (sans nombre pour un destinataire ajouté). Envoi depuis la boîte du service informatique.</p>
-          </section>
+          <p class="text-xs text-muted">Envoi depuis la boîte du service informatique.</p>
         </form>
       </template>
       <template #footer>

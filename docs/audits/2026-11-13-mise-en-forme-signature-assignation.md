@@ -39,3 +39,17 @@ Aucun constat ouvert.
 - `npm run typecheck` : OK.
 - `npm run test` : 100/100 (nouveaux tests : rendu et filtrage du texte mis en forme, imbrication extrême, signature enregistrée, réutilisée puis effacée).
 - `npm run test:e2e` : 24/24 (nouveaux tests : gras et signature dans l'aperçu, valideur choisi dans la colonne Valideur, clic sur un auteur absent de l'annuaire).
+
+## Complément : corps unique et nouvelle page de connexion
+
+- **Email** :
+  - un seul corps de message, pré-rempli avec le message et la signature de David DOUILLARD, modifiable à volonté. Plus de champ « Signature » séparé, plus d'aperçu ;
+  - suppression de la signature enregistrée par administrateur (route `GET /api/admin/me/signature` retirée, colonne supprimée par la migration `0005_drop_email_signature`) ;
+  - le corps reste validé puis converti en HTML par le serveur selon les mêmes règles (liste fermée de styles, texte échappé).
+- **Page de connexion** :
+  - deux panneaux : présentation « CTRL IT » avec le logo du groupe Fimavi, et bouton « Se connecter avec Microsoft » avec le logo Microsoft (SVG local) ;
+  - le lien pointe toujours vers `/auth/microsoft` (flux OIDC inchangé) ;
+  - logo Fimavi (`public/logo-fimavi.png`, extrait de la signature email) affiché aussi en haut à gauche de l'en-tête une fois connecté ;
+  - aucune ressource externe, CSP inchangée.
+- **TNR** : `npm run typecheck` OK, `npm run test` 100/100, `npm run test:e2e` 24/24.
+- **Note** : la signature par défaut contient le nom, le téléphone et l'adresse email de David DOUILLARD, à sa demande. Les autres administrateurs la remplacent dans le corps avant l'envoi.
