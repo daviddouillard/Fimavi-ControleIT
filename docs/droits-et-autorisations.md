@@ -11,7 +11,7 @@ Une seule inscription d'application, **multi-locataire** :
 | Permission | Type | Usage | Valider |
 |---|---|---|---|
 | `openid`, `profile`, `email` | Déléguée (connexion) | Connexion des utilisateurs (OIDC avec PKCE et nonce) ; aucun accès aux données de l'utilisateur | ☐ |
-| `User.Read.All` | Application | Synchronisation de l'annuaire de chaque tenant (nom, email, service, compte actif) : choix des valideurs | ☐ |
+| `User.Read.All` | Application | Synchronisation de l'annuaire de chaque tenant (nom, prénom, email, service, compte actif) : choix des valideurs | ☐ |
 | `Sites.Read.All` | Application | Lecture des sites SharePoint (bibliothèques, éléments, partages) | ☐ |
 | `Sites.Selected` | Application | Porte le **contrôle total site par site** (voir §2) | ☐ |
 | `AuditLogsQuery-SharePoint.Read.All` | Application | Lecture du journal d'audit **SharePoint uniquement** : retrouver qui a créé chaque partage (180 jours) | ☐ |

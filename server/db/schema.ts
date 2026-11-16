@@ -16,6 +16,8 @@ export const users = pgTable('users', {
   tenantId: text('tenant_id').notNull(),
   entraId: text('entra_id').notNull(),
   displayName: text('display_name').notNull(),
+  /** Prénom (givenName Entra) : salutation des emails. */
+  givenName: text('given_name'),
   mail: text('mail'),
   userPrincipalName: text('user_principal_name'),
   jobTitle: text('job_title'),

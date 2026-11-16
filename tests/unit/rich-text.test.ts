@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { greetingName } from '../../shared/emails'
 import { richDocSchema, richToHtml, textToDoc, type RichNode } from '../../shared/richText'
 
 const doc = (...content: RichNode[]): RichNode => ({ type: 'doc', content: [{ type: 'paragraph', content }] })
@@ -51,5 +52,13 @@ describe('texte mis en forme des emails', () => {
     let huge: RichNode = { type: 'text', text: 'x' }
     for (let i = 0; i < 100_000; i++) huge = { type: 'paragraph', content: [huge] }
     expect(richDocSchema().safeParse({ type: 'doc', content: [huge] }).success).toBe(false)
+  })
+})
+
+describe('prénom de la salutation', () => {
+  it('prend le prénom Entra, sinon le premier mot du nom affiché', () => {
+    expect(greetingName('David', 'David DOUILLARD')).toBe('David')
+    expect(greetingName(null, 'Valérie Valideuse')).toBe('Valérie')
+    expect(greetingName('  ', 'Marc')).toBe('Marc')
   })
 })

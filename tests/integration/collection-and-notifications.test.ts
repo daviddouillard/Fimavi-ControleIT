@@ -271,6 +271,8 @@ describe('emails aux valideurs', () => {
     expect(sent).toHaveLength(1)
     expect(sent[0]).toMatchObject({ to: 'n1@fimavi.test' })
     expect(sent[0]!.html).toContain('2 vérifications en attente')
+    // Salutation par le prénom : sans prénom Entra, premier mot du nom affiché.
+    expect(sent[0]!.html).toContain('Bonjour Valideur,')
 
     const rows = await db.select().from(notifications).where(eq(notifications.sessionId, s.session.id))
     expect(rows.map(r => r.status).sort()).toEqual(['failed', 'sent'])
@@ -340,11 +342,11 @@ describe('corps de l\'email par défaut', () => {
     expect(mail.html.indexOf('Merci par avance')).toBeLessThan(mail.html.indexOf('Cordialement'))
   })
 
-  it('remplace [Prénom Nom] et [Vérifications en attente] pour chaque destinataire et joint la bannière', () => {
+  it('remplace [Prénom] et [Vérifications en attente] pour chaque destinataire et joint la bannière', () => {
     const mail = assignmentEmail({ recipientName: 'Jean <Dupont>', sessionName: 'Revue T4', pending: 2, appUrl: 'https://app.test' })
     expect(mail.html).toContain('<p style="margin:0">Bonjour Jean &lt;Dupont&gt;,</p>')
     expect(mail.html).toContain('<strong>Vous avez 2 vérifications en attente dans la campagne « Revue T4 ».</strong><br><a href="https://app.test">Accéder à mes vérifications</a>')
-    expect(mail.html).not.toContain('[Prénom Nom]')
+    expect(mail.html).not.toContain('[Prénom]')
     expect(mail.html).not.toContain('[Vérifications en attente]')
     // Le lien n'est pas ajouté une seconde fois quand le champ est présent.
     expect(mail.html.split('Accéder à mes vérifications')).toHaveLength(2)
@@ -382,7 +384,7 @@ describe('paramètres et annuaire multi-tenant', () => {
 
     const results = await syncDirectory(db, s.admin, TEST_TENANT, async (tenant) => {
       if (tenant === '33333333-3333-3333-3333-333333333333') throw new Error('Consentement manquant')
-      if (tenant === '22222222-2222-2222-2222-222222222222') return [{ id: 'same-oid', displayName: 'Filiale User', mail: 'u@filiale.fr', userPrincipalName: null, jobTitle: null, department: null, accountEnabled: true }]
+      if (tenant === '22222222-2222-2222-2222-222222222222') return [{ id: 'same-oid', displayName: 'Filiale User', givenName: 'Paul', mail: 'u@filiale.fr', userPrincipalName: null, jobTitle: null, department: null, accountEnabled: true }]
       return [{ id: 'legacy-oid', displayName: 'Ancien compte (maj)', mail: null, userPrincipalName: null, jobTitle: null, department: null, accountEnabled: true },
         { id: 'same-oid', displayName: 'Homonyme principal', mail: null, userPrincipalName: null, jobTitle: null, department: null, accountEnabled: true }]
     })
@@ -393,6 +395,8 @@ describe('paramètres et annuaire multi-tenant', () => {
     expect(claimed).toMatchObject({ tenantId: TEST_TENANT, displayName: 'Ancien compte (maj)' })
     // Même object ID dans deux tenants : deux comptes distincts.
     expect(await db.select().from(users).where(eq(users.entraId, 'same-oid'))).toHaveLength(2)
+    // Prénom Entra synchronisé (salutation des emails).
+    expect((await db.select().from(users).where(eq(users.displayName, 'Filiale User')))[0]?.givenName).toBe('Paul')
   })
 })
 

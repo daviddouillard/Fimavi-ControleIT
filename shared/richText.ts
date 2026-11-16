@@ -107,7 +107,7 @@ export function usedInlineImages(node: RichNode, found = new Set<string>()): str
 /**
  * Champs remplacés à l'envoi, pour chaque destinataire. Ils restent visibles et déplaçables dans le corps du message.
  */
-export const FIELD_NAME = '[Prénom Nom]'
+export const FIELD_NAME = '[Prénom]'
 export const FIELD_PENDING = '[Vérifications en attente]'
 
 /** Blocs reconnus ; un nœud inconnu est rendu comme un simple conteneur de son contenu. */

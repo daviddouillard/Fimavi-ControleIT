@@ -4,7 +4,7 @@ import { createError, type RequestEvent } from 'nuxt/server'
 import { checkItems, controlSessions, notifications, users } from '../db/schema'
 import { recordAudit } from '../utils/audit'
 import type { Database } from '../utils/db'
-import { defaultEmailDoc, defaultEmailSubject, pendingSentence } from '../../shared/emails'
+import { defaultEmailDoc, defaultEmailSubject, greetingName, pendingSentence } from '../../shared/emails'
 import { FIELD_NAME, FIELD_PENDING, richPlainText, richToHtml, usedInlineImages, type RichNode } from '../../shared/richText'
 import type { Actor } from './checks'
 
@@ -113,6 +113,7 @@ export async function sendAssignmentEmails(
   const recipients = await db.select({
     id: users.id,
     displayName: users.displayName,
+    givenName: users.givenName,
     address: sql<string | null>`coalesce(${users.mail}, ${users.userPrincipalName})`,
     pending: sql<number>`count(${checkItems.id})::int`
   })
@@ -127,6 +128,7 @@ export async function sendAssignmentEmails(
     recipients.push(...await db.select({
       id: users.id,
       displayName: users.displayName,
+      givenName: users.givenName,
       address: sql<string | null>`coalesce(${users.mail}, ${users.userPrincipalName})`,
       pending: sql<number>`0::int`
     }).from(users).where(and(inArray(users.id, extraOnly), eq(users.accountEnabled, true))))
@@ -138,7 +140,7 @@ export async function sendAssignmentEmails(
     let error: string | null = null
     try {
       if (!recipient.address) throw new Error('Adresse email inconnue')
-      await deps.mailer({ to: recipient.address, ...assignmentEmail({ recipientName: recipient.displayName, sessionName: session.name, pending: recipient.pending, appUrl: deps.appUrl, ...deps.content }) })
+      await deps.mailer({ to: recipient.address, ...assignmentEmail({ recipientName: greetingName(recipient.givenName, recipient.displayName), sessionName: session.name, pending: recipient.pending, appUrl: deps.appUrl, ...deps.content }) })
     } catch (e) {
       status = 'failed'
       error = e instanceof Error ? e.message : 'erreur inconnue'

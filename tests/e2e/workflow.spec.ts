@@ -103,7 +103,7 @@ test('l\'admin ne peut pas envoyer les emails sans messagerie configurée', asyn
   await expect(body).toHaveCount(1)
   await expect(body).toContainText('Cordialement,')
   await expect(body).toContainText('David DOUILLARD')
-  await expect(body).toContainText('Bonjour [Prénom Nom],')
+  await expect(body).toContainText('Bonjour [Prénom],')
   await expect(body.locator('img[src="/signature-fimavi.jpg"]')).toBeVisible()
   await body.click()
   await page.keyboard.press('ControlOrMeta+a')

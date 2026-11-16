@@ -72,3 +72,10 @@ Aucun constat ouvert.
 - Nom affiché en entier, « Contrôles IT », partout : page de connexion (« Contrôles IT du groupe » en titre, sans titre ni icône répétés côté connexion), en-tête une fois connecté, objet des emails. L'abréviation « CTRL IT » est supprimée.
 - Message par défaut réécrit à la première personne (« Je vous ai confié… »). Il explique pourquoi on fait ce contrôle (« Pourquoi ? ») et ce qui est attendu (« Ce que je vous demande : »).
 - Textes uniquement, aucun impact sécurité. TNR : `npm run typecheck` OK, `npm run test` 102/102, `npm run test:e2e` 24/24.
+
+## Complément (2026-11-16) : salutation par le prénom
+
+- Le champ du corps devient `[Prénom]` : « Bonjour David, » au lieu de « Bonjour David DOUILLARD, ».
+- Prénom lu dans l'annuaire Entra (`givenName`, ajouté à la synchronisation, colonne `users.given_name`, migration `0006_users_given_name`). Avant la prochaine synchronisation, ou si un compte n'a pas de prénom : premier mot du nom affiché.
+- Sécurité : prénom échappé dans le HTML comme le nom ; même permission `User.Read.All`, aucune nouvelle donnée sensible.
+- TNR : `npm run typecheck` OK, `npm run test` 103/103, `npm run test:e2e` 24/24.

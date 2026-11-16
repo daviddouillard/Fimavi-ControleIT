@@ -8,6 +8,7 @@ const tokenSchema = z.object({ access_token: z.string(), expires_in: z.number() 
 const graphUserSchema = z.object({
   id: z.string(),
   displayName: z.string().nullable(),
+  givenName: z.string().nullable().optional(),
   mail: z.string().nullable(),
   userPrincipalName: z.string().nullable(),
   jobTitle: z.string().nullable(),
@@ -147,7 +148,7 @@ export function graphClient(tenant: string, fetchImpl: typeof fetch = fetch): Gr
 
 /** Liste tous les comptes membres (hors invités) d'un tenant. */
 export async function listDirectoryMembers(tenant: string): Promise<GraphUser[]> {
-  const select = 'id,displayName,mail,userPrincipalName,jobTitle,department,accountEnabled'
+  const select = 'id,displayName,givenName,mail,userPrincipalName,jobTitle,department,accountEnabled'
   const result: GraphUser[] = []
   for await (const page of graphClient(tenant).list(`users?$select=${select}&$filter=userType eq 'Member'&$top=999`)) {
     result.push(...z.array(graphUserSchema).parse(page))

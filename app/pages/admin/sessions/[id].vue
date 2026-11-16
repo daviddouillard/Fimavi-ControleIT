@@ -712,7 +712,7 @@ function sendEmails() {
             label="Message"
             required
             :hint="`${messageLength}/5000`"
-            description="Message et signature, modifiables à votre guise. À l'envoi, [Prénom Nom] est remplacé par le nom de chaque destinataire, et [Vérifications en attente] par son nombre de lignes et le lien vers l'application."
+            description="Message et signature, modifiables à votre guise. À l'envoi, [Prénom] est remplacé par le prénom de chaque destinataire, et [Vérifications en attente] par son nombre de lignes et le lien vers l'application."
           >
             <RichEditor v-model="email.message" label="Message" placeholder="Votre message…" />
           </UFormField>

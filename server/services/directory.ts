@@ -48,6 +48,7 @@ export async function syncDirectory(
           tenantId,
           entraId: m.id,
           displayName: m.displayName ?? m.userPrincipalName ?? m.id,
+          givenName: m.givenName ?? null,
           mail: m.mail,
           userPrincipalName: m.userPrincipalName,
           jobTitle: m.jobTitle,
@@ -59,6 +60,7 @@ export async function syncDirectory(
           target: [users.tenantId, users.entraId],
           set: {
             displayName: sql`excluded.display_name`,
+            givenName: sql`excluded.given_name`,
             mail: sql`excluded.mail`,
             userPrincipalName: sql`excluded.user_principal_name`,
             jobTitle: sql`excluded.job_title`,

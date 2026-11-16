@@ -46,6 +46,10 @@ export const defaultEmailDoc = (): RichNode => {
   return { type: 'doc', content: [...content, ...structuredClone(DEFAULT_SIGNATURE)] }
 }
 
+/** Prénom pour la salutation : prénom Entra, à défaut le premier mot du nom affiché. */
+export const greetingName = (givenName: string | null | undefined, displayName: string) =>
+  givenName?.trim() || displayName.trim().split(/\s+/)[0] || displayName
+
 /**
  * Phrase ajoutée automatiquement à chaque email, avec le nombre de lignes du destinataire.
  * Un destinataire ajouté à la main (sans ligne assignée) reçoit une phrase sans compteur.
