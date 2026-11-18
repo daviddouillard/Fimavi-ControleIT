@@ -54,3 +54,8 @@ Voir `docs/droits-et-autorisations.md` §3.2 :
 - Décision de l'IT : accepter cet avis **jusqu'au 2026-12-31**, puisque `picomatch` est absent du serveur déployé.
 - Mise en œuvre : `scripts/audit-gate.mjs` (étape CI et `npm run audit:deps`). Il bloque tout autre avis élevé ou critique. L'exception redevient bloquante à son expiration, et le script signale quand elle n'est plus utile.
 - Vérification locale : seul cet avis est concerné ; résultat « Aucun avis bloquant ».
+
+## Complément : renommer un tenant (2026-11-18)
+
+- Crayon à côté du nom de chaque tenant dans les paramètres. Il utilise la route existante `PATCH /api/admin/settings/connections/:id`, réservée aux admins. Le nom est validé par Zod (2 à 100 caractères) et le changement est tracé dans l'audit (`settings.connection_update`). Le nom est affiché par interpolation Vue, sans `v-html`.
+- TNR : typecheck OK, vitest 113/113, e2e 25/25 (le test des paramètres couvre le renommage).

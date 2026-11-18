@@ -54,6 +54,25 @@ function deleteConnection(id: string) {
     return 'Tenant retiré'
   })
 }
+// Renommage d'un tenant (nom affiché dans l'application).
+const renamingId = ref<string | null>(null)
+const renameValue = ref('')
+function startRename(id: string, name: string) {
+  renamingId.value = id
+  renameValue.value = name
+}
+function saveRename(id: string) {
+  const name = renameValue.value.trim()
+  if (name.length < 2 || name.length > 100) {
+    toast.add({ title: 'Nom invalide', description: 'Entre 2 et 100 caractères.', color: 'error' })
+    return
+  }
+  return act(async () => {
+    await $fetch(`/api/admin/settings/connections/${id}`, { method: 'PATCH', body: { name } })
+    renamingId.value = null
+    return 'Tenant renommé'
+  })
+}
 async function copy(text: string) {
   await navigator.clipboard.writeText(text)
   toast.add({ title: 'Lien copié', description: 'À ouvrir par un administrateur global du tenant concerné.', color: 'success' })
@@ -150,8 +169,14 @@ const sitesOf = (connectionId: string) => (settings.value?.sites ?? []).filter(s
         <div v-for="c in settings.connections" :key="c.id" class="space-y-3 rounded-md border border-default p-4">
           <div class="flex flex-wrap items-center gap-3">
             <div class="min-w-48 flex-1">
-              <p class="font-medium">
+              <form v-if="renamingId === c.id" class="flex flex-wrap items-center gap-2" @submit.prevent="saveRename(c.id)">
+                <UInput v-model="renameValue" autofocus class="min-w-60" aria-label="Nouveau nom du tenant" @keydown.esc="renamingId = null" />
+                <UButton type="submit" size="sm" icon="i-lucide-check" :loading="busy">Enregistrer</UButton>
+                <UButton size="sm" variant="ghost" color="neutral" @click="renamingId = null">Annuler</UButton>
+              </form>
+              <p v-else class="font-medium">
                 {{ c.name }}
+                <UButton size="xs" variant="ghost" color="neutral" icon="i-lucide-pencil" aria-label="Renommer le tenant" @click="startRename(c.id, c.name)" />
                 <UBadge v-if="c.tenantId === settings.homeTenantId" variant="subtle" color="primary" class="ml-1">Tenant principal</UBadge>
                 <UBadge v-if="!c.enabled" variant="subtle" color="neutral" class="ml-1">Désactivé</UBadge>
               </p>

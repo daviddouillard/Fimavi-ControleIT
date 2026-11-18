@@ -58,6 +58,17 @@ test('la création de session « boîtes partagées » propose les tenants actif
   await page.goto('/admin/settings')
   await expect(page.getByRole('button', { name: 'Tester Exchange' })).toBeVisible()
 
+  // Renommage d'un tenant, puis retour au nom d'origine.
+  await page.getByRole('button', { name: 'Renommer le tenant' }).first().click()
+  await page.getByRole('textbox', { name: 'Nouveau nom du tenant' }).fill('Fimavi Groupe')
+  await page.getByRole('button', { name: 'Enregistrer' }).last().click()
+  await expect(page.getByText('Tenant renommé')).toBeVisible()
+  await expect(page.getByText('Fimavi Groupe')).toBeVisible()
+  await page.getByRole('button', { name: 'Renommer le tenant' }).first().click()
+  await page.getByRole('textbox', { name: 'Nouveau nom du tenant' }).fill('Fimavi')
+  await page.getByRole('button', { name: 'Enregistrer' }).last().click()
+  await expect(page.getByText('Fimavi Groupe')).toHaveCount(0)
+
   await page.goto('/admin')
   await page.waitForLoadState('networkidle')
   await page.getByRole('button', { name: 'Nouvelle session' }).click()
