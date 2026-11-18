@@ -32,7 +32,8 @@ export default defineEventHandler(async (event) => {
       name: input.name,
       description: input.description,
       template: input.template,
-      config: input.template === 'exchange-shared-mailboxes' ? { connectionIds } : { siteIds },
+      // Noms de domaine Gandi : aucune option, toute l'organisation du jeton est lue.
+      config: input.template === 'exchange-shared-mailboxes' ? { connectionIds } : input.template === 'gandi-domains' ? {} : { siteIds },
       dueDate: input.dueDate ? new Date(input.dueDate) : null,
       createdById: admin.id
     }).returning()

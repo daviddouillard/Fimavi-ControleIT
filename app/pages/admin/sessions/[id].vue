@@ -6,6 +6,7 @@ import ShareResource from '~/components/ShareResource.vue'
 import { defaultEmailDoc, defaultEmailSubject } from '#shared/emails'
 import { richPlainText, type RichNode } from '#shared/richText'
 import { notifySchema } from '#shared/schemas/checks'
+import { decisionWording } from '#shared/decisions'
 import type { DirectoryUser } from '~/composables/useDirectorySearch'
 
 const UCheckbox = resolveComponent('UCheckbox')
@@ -24,14 +25,17 @@ type Item = NonNullable<typeof data.value>['items'][number]
 const session = computed(() => data.value?.session)
 /** Modèle boîtes partagées : le tenant tient lieu de site, le droit de type d'accès ; pas d'auteur de partage. */
 const isMailboxes = computed(() => session.value?.template === 'exchange-shared-mailboxes')
+/** Modèle noms de domaine (Gandi) : l'extension tient lieu de site, l'échéance de bénéficiaire ; pas d'auteur. */
+const isDomains = computed(() => session.value?.template === 'gandi-domains')
+const wording = (decision: 'keep' | 'remove') => decisionWording(decision, session.value?.template)
 const editable = computed(() => session.value?.status !== 'closed')
 /** Ligne (ré)assignable : sans réponse, ou signalée comme mal attribuée, et non clôturée. */
 const isPending = (item: Item) => (!item.decision || item.decision === 'reassign') && !item.closedAt
 
 function itemState(item: Item): { label: string, color: 'neutral' | 'warning' | 'success' | 'error' | 'info' } {
   if (item.closedAt) return { label: 'Clôturée sans validation', color: 'info' }
-  if (item.decision === 'keep') return { label: 'Partage validé', color: 'success' }
-  if (item.decision === 'remove') return { label: 'Partage à arrêter', color: 'error' }
+  if (item.decision === 'keep') return { label: wording('keep').state, color: 'success' }
+  if (item.decision === 'remove') return { label: wording('remove').state, color: 'error' }
   if (item.decision === 'reassign') return { label: 'À réattribuer', color: 'warning' }
   if (session.value?.status === 'closed') return { label: 'Sans réponse', color: 'neutral' }
   if (item.assigneeId) return { label: 'En attente', color: 'warning' }
@@ -39,17 +43,17 @@ function itemState(item: Item): { label: string, color: 'neutral' | 'warning' | 
 }
 
 // Filtres
-const filters = [
+const filters = computed(() => [
   { label: 'Tous les états', value: 'all' },
   { label: 'Sans valideur', value: 'unassigned' },
   { label: 'À réattribuer', value: 'reassign' },
   { label: 'En attente de réponse', value: 'waiting' },
   { label: 'Répondues', value: 'answered' },
-  { label: 'Partage validé', value: 'keep' },
-  { label: 'Partage à arrêter', value: 'remove' },
+  { label: wording('keep').state, value: 'keep' },
+  { label: wording('remove').state, value: 'remove' },
   { label: 'Clôturées sans validation', value: 'closed' }
-] as const
-const filter = ref<(typeof filters)[number]['value']>('all')
+] as const)
+const filter = ref<(typeof filters.value)[number]['value']>('all')
 const NO_ASSIGNEE = 'Sans valideur'
 const search = ref('')
 const siteFilter = ref<string[]>([])
@@ -60,8 +64,8 @@ const typeFilter = ref<string[]>([])
 /** Valeurs distinctes d'un champ, triées, pour les listes de filtres. */
 const distinct = (pick: (item: Item) => string | null | undefined) =>
   [...new Set((data.value?.items ?? []).map(pick).filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b, 'fr'))
-const placeOf = (item: Item) => item.data.site ?? item.data.tenant
-const accessOf = (item: Item) => item.data.access ?? item.data.right
+const placeOf = (item: Item) => item.data.site ?? item.data.tenant ?? (item.data.tld ? `.${item.data.tld}` : undefined)
+const accessOf = (item: Item) => item.data.access ?? item.data.right ?? (item.data.autorenew ? `Renouvellement auto ${item.data.autorenew.toLowerCase()}` : undefined)
 const siteOptions = computed(() => distinct(placeOf))
 const assigneeOptions = computed(() => [NO_ASSIGNEE, ...distinct(i => i.assigneeName)])
 const accessOptions = computed(() => distinct(accessOf))
@@ -80,18 +84,18 @@ const matchesState = (item: Item) => {
   }
 }
 const inList = (selected: string[], value: string | null | undefined) => !selected.length || selected.includes(value ?? '')
-const searchText = (item: Item) => [item.label, item.data.resource, item.data.beneficiary, item.data.site, item.data.mailbox, item.data.mailboxName, item.data.trustee, item.data.trusteeName, item.data.right, item.data.sharedBy, item.data.suggestedValidatorName, item.assigneeName, item.comment]
+const searchText = (item: Item) => [item.label, item.data.resource, item.data.beneficiary, item.data.site, item.data.mailbox, item.data.mailboxName, item.data.trustee, item.data.trusteeName, item.data.right, item.data.domain, item.data.domainOwner, item.data.sharedBy, item.data.suggestedValidatorName, item.assigneeName, item.comment]
   .filter(Boolean).join(' ').toLocaleLowerCase('fr')
 
 // Tri par colonne (clic sur l'en-tête : croissant, puis décroissant).
 type SortKey = 'rowNumber' | 'site' | 'resource' | 'beneficiary' | 'author' | 'assignee' | 'state' | 'remediation'
 const sort = ref<{ key: SortKey, desc: boolean }>({ key: 'rowNumber', desc: false })
-const resourceName = (item: Item) => item.data.mailbox ? item.data.mailboxName || item.data.mailbox : (item.data.resource ?? item.label).split(' / ').at(-1) ?? ''
+const resourceName = (item: Item) => item.data.domain ? item.data.domain : item.data.mailbox ? item.data.mailboxName || item.data.mailbox : (item.data.resource ?? item.label).split(' / ').at(-1) ?? ''
 const sortValue: Record<SortKey, (item: Item) => string | number> = {
   rowNumber: i => i.rowNumber,
   site: i => placeOf(i) ?? '',
   resource: resourceName,
-  beneficiary: i => i.data.beneficiary ?? i.data.trusteeName ?? i.data.trustee ?? '',
+  beneficiary: i => i.data.beneficiary ?? i.data.trusteeName ?? i.data.trustee ?? i.data.domainExpiresAt ?? '',
   author: i => i.data.sharedBy ?? '￿',
   assignee: i => i.assigneeName ?? '',
   state: i => itemState(i).label,
@@ -157,7 +161,7 @@ const sortHeader = (label: string, key: SortKey) => () => {
 }
 
 /** Colonnes affichées : la colonne « Partagé par » (journal d'audit SharePoint) est propre au modèle SharePoint. */
-const visibleColumns = computed(() => isMailboxes.value ? columns.filter(c => c.id !== 'author') : columns)
+const visibleColumns = computed(() => isMailboxes.value || isDomains.value ? columns.filter(c => c.id !== 'author') : columns)
 const columns: TableColumn<Item>[] = [
   {
     id: 'select',
@@ -175,15 +179,15 @@ const columns: TableColumn<Item>[] = [
     })
   },
   { accessorKey: 'rowNumber', header: sortHeader('#', 'rowNumber') },
-  { id: 'site', header: () => sortHeader(isMailboxes.value ? 'Tenant' : 'Site', 'site')(), cell: ({ row }) => h('span', { class: 'whitespace-nowrap font-medium' }, placeOf(row.original) ?? '—') },
+  { id: 'site', header: () => sortHeader(isMailboxes.value ? 'Tenant' : isDomains.value ? 'Extension' : 'Site', 'site')(), cell: ({ row }) => h('span', { class: 'whitespace-nowrap font-medium' }, placeOf(row.original) ?? '—') },
   {
     id: 'resource',
-    header: () => sortHeader(isMailboxes.value ? 'Boîte partagée' : 'Ressource', 'resource')(),
+    header: () => sortHeader(isMailboxes.value ? 'Boîte partagée' : isDomains.value ? 'Nom de domaine' : 'Ressource', 'resource')(),
     cell: ({ row }) => h('div', { class: 'min-w-64 max-w-md 2xl:max-w-xl' }, [h(ShareResource, { data: row.original.data, label: row.original.label })])
   },
   {
     id: 'beneficiary',
-    header: () => sortHeader(isMailboxes.value ? 'Titulaire et droit' : 'Bénéficiaire', 'beneficiary')(),
+    header: () => sortHeader(isMailboxes.value ? 'Titulaire et droit' : isDomains.value ? 'Échéance' : 'Bénéficiaire', 'beneficiary')(),
     cell: ({ row }) => h('div', { class: 'min-w-56 max-w-xs 2xl:max-w-sm' }, [h(ShareBeneficiary, { data: row.original.data })])
   },
   {
@@ -475,7 +479,7 @@ function sendEmails() {
     <UCard v-if="run">
       <template #header>
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <h2 class="font-medium">{{ isMailboxes ? 'Lecture des accès aux boîtes partagées' : 'Collecte des partages' }}</h2>
+          <h2 class="font-medium">{{ isMailboxes ? 'Lecture des accès aux boîtes partagées' : isDomains ? 'Lecture des noms de domaine Gandi' : 'Collecte des partages' }}</h2>
           <UButton
             v-if="session.status === 'draft' && run.status !== 'running'"
             icon="i-lucide-refresh-cw"
@@ -490,10 +494,10 @@ function sendEmails() {
       <div class="space-y-2 text-sm">
         <p v-if="run.status === 'running'" class="flex flex-wrap items-center gap-2">
           <UIcon name="i-lucide-loader-circle" class="animate-spin" />
-          En cours : {{ isMailboxes ? 'tenant' : 'site' }} {{ Math.min((progress.sitesDone ?? 0) + 1, progress.sitesTotal ?? 1) }}/{{ progress.sitesTotal ?? '?' }}
+          En cours : {{ isMailboxes ? 'tenant' : isDomains ? 'source' : 'site' }} {{ Math.min((progress.sitesDone ?? 0) + 1, progress.sitesTotal ?? 1) }}/{{ progress.sitesTotal ?? '?' }}
           <span v-if="progress.site" class="text-muted break-all">({{ progress.site }})</span>
           <template v-if="isMailboxes">· boîtes partagées lues {{ progress.mailboxesDone ?? 0 }}/{{ progress.mailboxesTotal ?? '?' }}</template>
-          <template v-else>· {{ progress.itemsScanned ?? 0 }} éléments parcourus</template>
+          <template v-else-if="!isDomains">· {{ progress.itemsScanned ?? 0 }} éléments parcourus</template>
           <template v-if="progress.permissionsTotal">· partages analysés {{ progress.permissionsChecked ?? 0 }}/{{ progress.permissionsTotal }}</template>
           <template v-if="progress.authors === 'running'">· recherche des auteurs dans le journal d'audit Microsoft 365…</template>
           · {{ progress.added ?? 0 }} ligne(s) ajoutée(s)<template v-if="progress.duplicates">, {{ progress.duplicates }} déjà présente(s)</template>

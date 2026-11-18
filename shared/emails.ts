@@ -2,10 +2,13 @@ import { FIELD_NAME, FIELD_PENDING, textToDoc, type RichNode } from './richText'
 
 /** Email « vous avez des vérifications à faire » : textes par défaut, modifiables par l'admin avant envoi. */
 
-const isMailboxes = (template?: string) => template === 'exchange-shared-mailboxes'
+const SUBJECTS: Record<string, string> = {
+  'exchange-shared-mailboxes': 'accès aux boîtes partagées',
+  'gandi-domains': 'noms de domaine à renouveler ?'
+}
 
 export const defaultEmailSubject = (sessionName: string, template?: string) =>
-  `Contrôles IT : ${isMailboxes(template) ? 'accès aux boîtes partagées' : 'partages externes'} à vérifier — ${sessionName}`
+  `Contrôles IT : ${SUBJECTS[template ?? ''] ?? 'partages externes'}${template === 'gandi-domains' ? '' : ' à vérifier'} — ${sessionName}`
 
 export const DEFAULT_EMAIL_MESSAGE = [
   `Bonjour ${FIELD_NAME},`,
@@ -38,6 +41,22 @@ export const DEFAULT_MAILBOX_EMAIL_MESSAGE = [
   ''
 ].join('\n')
 
+/** Message par défaut du modèle « Noms de domaine (Gandi) ». */
+export const DEFAULT_DOMAIN_EMAIL_MESSAGE = [
+  `Bonjour ${FIELD_NAME},`,
+  '',
+  FIELD_PENDING,
+  '',
+  'Je vous ai confié des noms de domaine du groupe à vérifier : des adresses de sites web ou d\'emails que nous achetons et renouvelons chaque année chez Gandi.',
+  '',
+  'Pourquoi ? Un nom de domaine se renouvelle automatiquement, même quand le site, la marque ou le projet n\'existe plus. Faire le point avant chaque échéance évite de payer pour rien, et de laisser expirer un domaine encore utilisé (site ou emails coupés). Vous êtes le mieux placé pour savoir si ces domaines servent toujours.',
+  '',
+  'Ce que je vous demande : pour chaque domaine, indiquez s\'il faut continuer à le renouveler ou non, ou signalez qu\'il ne vous concerne pas. Ajoutez un court commentaire à chaque réponse. Si le domaine n\'est plus utile, je m\'occupe d\'arrêter son renouvellement.',
+  '',
+  'Merci par avance de votre retour.',
+  ''
+].join('\n')
+
 /** Signature intégrée au message par défaut (modifiable dans le corps du message avant chaque envoi). */
 const DEFAULT_SIGNATURE: RichNode[] = [
   { type: 'paragraph', content: [{ type: 'text', text: 'Cordialement,' }] },
@@ -53,7 +72,8 @@ const BOLD_LEADS = ['Pourquoi ?', 'Ce que je vous demande :']
 
 /** Corps par défaut de l'email : message du modèle puis signature, dans un seul document de l'éditeur. */
 export const defaultEmailDoc = (template?: string): RichNode => {
-  const message = textToDoc(isMailboxes(template) ? DEFAULT_MAILBOX_EMAIL_MESSAGE : DEFAULT_EMAIL_MESSAGE).content ?? []
+  const text = template === 'exchange-shared-mailboxes' ? DEFAULT_MAILBOX_EMAIL_MESSAGE : template === 'gandi-domains' ? DEFAULT_DOMAIN_EMAIL_MESSAGE : DEFAULT_EMAIL_MESSAGE
+  const message = textToDoc(text).content ?? []
   const content = message.map((paragraph) => {
     const text = paragraph.content?.[0]?.text ?? ''
     const lead = BOLD_LEADS.find(l => text.startsWith(l))

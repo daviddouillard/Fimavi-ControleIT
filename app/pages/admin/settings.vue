@@ -133,6 +133,20 @@ async function testExchange(id: string) {
   }
 }
 
+// Test du jeton Gandi (modèle « Noms de domaine »).
+const testingGandi = ref(false)
+async function testGandi() {
+  testingGandi.value = true
+  try {
+    const r = await $fetch<{ ok: boolean, domains?: number, message?: string }>('/api/admin/settings/gandi/test', { method: 'POST' })
+    toast.add(r.ok
+      ? { title: 'Gandi OK', description: `${r.domains} nom(s) de domaine lisible(s).`, color: 'success' }
+      : { title: 'Gandi inaccessible', description: r.message, color: 'error', duration: 15000 })
+  } finally {
+    testingGandi.value = false
+  }
+}
+
 const sitesOf = (connectionId: string) => (settings.value?.sites ?? []).filter(s => s.connectionId === connectionId)
 </script>
 
@@ -152,6 +166,23 @@ const sitesOf = (connectionId: string) => (settings.value?.sites ?? []).filter(s
         <UTextarea v-model="domainsText" :rows="6" class="w-full font-mono" placeholder="fimavi.com&#10;filiale.fr" aria-label="Domaines internes" />
         <p v-if="!domainsCheck.success" class="text-sm text-error">{{ domainsCheck.error.issues[0]?.message }}</p>
         <UButton icon="i-lucide-save" :loading="busy" :disabled="!domainsCheck.success" @click="saveDomains">Enregistrer</UButton>
+      </div>
+    </UCard>
+
+    <UCard>
+      <template #header>
+        <h2 class="font-medium">Gandi (noms de domaine)</h2>
+        <p class="text-sm text-muted">
+          Lecture seule des noms de domaine de l'organisation Gandi et de leur échéance, avec un jeton d'accès personnel Gandi.
+          Le jeton se configure dans Secret Manager (NUXT_GANDI_TOKEN), jamais ici, et expire au plus tard au bout d'un an.
+        </p>
+      </template>
+      <div class="flex flex-wrap items-center gap-3">
+        <UBadge v-if="settings.gandiConfigured" color="success" variant="subtle" icon="i-lucide-key-round">Jeton configuré</UBadge>
+        <UBadge v-else color="neutral" variant="subtle" icon="i-lucide-key-round">Jeton non configuré</UBadge>
+        <UButton size="sm" variant="outline" icon="i-lucide-globe" :loading="testingGandi" :disabled="!settings.gandiConfigured" @click="testGandi">
+          Tester Gandi
+        </UButton>
       </div>
     </UCard>
 

@@ -73,6 +73,19 @@ Lecture seule, dans chaque tenant analysé :
 - Service utilisé : `https://outlook.office365.com/adminapi/beta/<tenant>/InvokeCommand`, celui du module PowerShell officiel ExchangeOnlineManagement. Il n'est pas documenté publiquement par Microsoft et peut évoluer : en cas de panne, le bouton « Tester Exchange » des paramètres le signale.
 - « Lecteur général » donne une lecture de toute la configuration Microsoft 365 du tenant, sans le contenu des emails ni des fichiers. Une piste plus restreinte est un groupe de rôles Exchange limité à « View-Only Recipients », attribué au principal de service. Elle sera à valider une fois le module en service.
 
+### 3.3 Gandi : lecture des noms de domaine (modèle « Noms de domaine »)
+
+| Élément | Valeur | Valider |
+|---|---|---|
+| Jeton | Jeton d'accès personnel (PAT) Gandi, limité à **une organisation** | ☐ |
+| Droit du jeton | Voir les noms de domaine (le moins de droits possible proposé par Gandi) ; aucun droit technique, DNS, facturation ni gestion | ☐ |
+| Durée | La plus courte acceptable (1 an au plus) ; date de fin notée pour le renouveler | ☐ |
+| Stockage | Secret Manager `controleit-gandi-token`, lu par le compte `controleit-run` ; variable GitHub `GANDI_TOKEN_SECRET` = nom du secret | ☐ |
+
+- L'application ne fait que des lectures (`GET https://api.gandi.net/v5/domain/domains`) ; le jeton n'est envoyé qu'à `https://api.gandi.net/v5/` (`server/utils/gandi.ts`).
+- Le jeton n'est jamais renvoyé au navigateur : les paramètres indiquent seulement s'il est configuré.
+- « Ne plus renouveler » crée une action pour l'IT, qui désactive le renouvellement automatique **à la main** dans Gandi.
+
 ## 4. Utilisateurs de l'application
 
 ### 4.1 Qui peut se connecter
@@ -170,5 +183,6 @@ Détail dans `docs/base-de-donnees.md` et `scripts/db-grants.mjs`.
 | `controleit-database-url` | Connexion du rôle `controleit_app` |
 | `controleit-entra-client-secret` | Secret client de l'application Entra (à renouveler avant expiration) |
 | `controleit-db-owner-password` / `controleit-db-app-password` | Mots de passe des rôles de base |
+| `controleit-gandi-token` | Jeton d'accès personnel Gandi (modèle « Noms de domaine ») : **expire au plus tard au bout d'un an**, à renouveler dans Gandi puis ici |
 
 Aucun secret n'est dans le code ni dans le dépôt GitHub.

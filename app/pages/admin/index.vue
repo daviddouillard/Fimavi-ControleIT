@@ -37,7 +37,8 @@ function toggleTenant(connectionId: string, checked: boolean) {
   form.connectionIds = checked ? [...new Set([...current, connectionId])] : current.filter(c => c !== connectionId)
 }
 const isMailboxes = computed(() => form.template === 'exchange-shared-mailboxes')
-const canCreate = computed(() => isMailboxes.value ? !!form.connectionIds?.length : !!form.siteIds?.length)
+const isDomains = computed(() => form.template === 'gandi-domains')
+const canCreate = computed(() => isDomains.value || (isMailboxes.value ? !!form.connectionIds?.length : !!form.siteIds?.length))
 function toggleSite(siteId: string, checked: boolean) {
   const current = form.siteIds ?? []
   form.siteIds = checked ? [...new Set([...current, siteId])] : current.filter(s => s !== siteId)
@@ -101,7 +102,7 @@ const sessionStats = (s: SessionRow) => [
 const kpis = computed(() => [
   { label: 'Réponses en attente', value: totals.value.pending, icon: 'i-lucide-hourglass', tone: 'bg-warning/10 text-warning' },
   { label: 'Lignes à (ré)attribuer', value: totals.value.unassigned, icon: 'i-lucide-user-plus', tone: 'bg-info/10 text-info' },
-  { label: 'Accès à retirer (IT)', value: remediations.value.length, icon: 'i-lucide-shield-x', tone: 'bg-error/10 text-error' }
+  { label: 'Actions IT à faire', value: remediations.value.length, icon: 'i-lucide-shield-x', tone: 'bg-error/10 text-error' }
 ])
 </script>
 
@@ -195,9 +196,9 @@ const kpis = computed(() => [
       <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <div class="flex items-center gap-2">
           <UIcon name="i-lucide-shield-x" class="size-5 text-error" />
-          <h2 class="text-lg font-semibold">Accès à retirer ({{ remediations.length }})</h2>
+          <h2 class="text-lg font-semibold">Actions à faire ({{ remediations.length }})</h2>
         </div>
-        <p class="text-sm text-muted">Retirez l'accès dans SharePoint ou Exchange, puis cliquez sur « Fait ».</p>
+        <p class="text-sm text-muted">Retirez l'accès dans SharePoint ou Exchange, ou désactivez le renouvellement du domaine chez Gandi, puis cliquez sur « Fait ».</p>
       </div>
       <div v-if="!remediations.length" class="flex items-center gap-3 rounded-xl border border-dashed border-default p-5 text-muted">
         <UIcon name="i-lucide-party-popper" class="size-6" /> Rien à retirer pour le moment.
@@ -259,7 +260,9 @@ const kpis = computed(() => [
           <p class="text-sm text-muted">
             {{ isMailboxes
               ? 'La lecture des accès aux boîtes partagées (accès total, envoyer en tant que, envoyer de la part de) démarre dès la création.'
-              : 'La recherche des partages externes démarre dès la création.' }}
+              : isDomains
+                ? 'La lecture de tous les noms de domaine Gandi et de leur échéance démarre dès la création. Chaque valideur dira s’il faut continuer à renouveler le domaine.'
+                : 'La recherche des partages externes démarre dès la création.' }}
           </p>
         </form>
       </template>
@@ -270,7 +273,7 @@ const kpis = computed(() => [
           :loading="creating"
           :disabled="!canCreate"
         >
-          {{ isMailboxes ? 'Créer et lire les accès' : 'Créer et rechercher les partages' }}
+          {{ isMailboxes ? 'Créer et lire les accès' : isDomains ? 'Créer et lire les domaines' : 'Créer et rechercher les partages' }}
         </UButton>
       </template>
     </UModal>

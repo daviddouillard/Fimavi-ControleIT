@@ -81,3 +81,20 @@ test('la création de session « boîtes partagées » propose les tenants actif
   await dialog.getByRole('checkbox', { name: /Fimavi/ }).click()
   await expect(dialog.getByRole('button', { name: 'Créer et lire les accès' })).toBeDisabled()
 })
+
+test('modèle « Noms de domaine » : jeton Gandi signalé non configuré, session sans site ni tenant', async ({ page, baseURL }) => {
+  await loginAs(page.context(), baseURL!, USERS.admin)
+  await page.goto('/admin/settings')
+  await expect(page.getByText('Jeton non configuré')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Tester Gandi' })).toBeDisabled()
+
+  await page.goto('/admin')
+  await page.waitForLoadState('networkidle')
+  await page.getByRole('button', { name: 'Nouvelle session' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByRole('combobox').click()
+  await page.getByRole('option', { name: 'Noms de domaine (Gandi)' }).click()
+  await dialog.getByRole('textbox').first().fill('Domaines 2027')
+  await expect(dialog.getByRole('checkbox')).toHaveCount(0)
+  await expect(dialog.getByRole('button', { name: 'Créer et lire les domaines' })).toBeEnabled()
+})

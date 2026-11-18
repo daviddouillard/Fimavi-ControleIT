@@ -8,7 +8,8 @@ import { homeTenant } from '../../../utils/tenants'
 export default defineEventHandler(async (event) => {
   await requireAdmin(event)
   const settings = await getSettings(useDb())
-  const { clientId, redirectURL } = useRuntimeConfig().oauth.microsoft
+  const config = useRuntimeConfig()
+  const { clientId, redirectURL } = config.oauth.microsoft
 
   const consentUrl = (tenantId: string) => {
     // Point de consentement v1 : il accorde toutes les permissions déclarées sur l'app registration
@@ -21,6 +22,8 @@ export default defineEventHandler(async (event) => {
   return {
     ...settings,
     homeTenantId: homeTenant(),
+    // Jamais le jeton lui-même : seulement s'il est configuré.
+    gandiConfigured: !!config.gandiToken,
     connections: settings.connections.map(c => ({ ...c, consentUrl: consentUrl(c.tenantId) }))
   }
 })

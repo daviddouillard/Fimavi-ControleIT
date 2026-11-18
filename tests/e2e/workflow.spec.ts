@@ -190,7 +190,7 @@ test('un valideur ne peut répondre ni à une ligne qui ne lui est pas assignée
 test('l\'IT traite le retrait : il quitte la liste et apparaît dans l\'historique', async ({ page, baseURL }) => {
   await as(page, baseURL, 'admin')
   await page.goto('/admin')
-  await expect(page.getByRole('heading', { name: 'Accès à retirer (1)' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Actions à faire (1)' })).toBeVisible()
   await expect(page.getByText('Prestataire parti en septembre')).toBeVisible()
   await page.getByRole('button', { name: 'Fait' }).click()
   await expect(page.getByText('Rien à retirer pour le moment.')).toBeVisible()

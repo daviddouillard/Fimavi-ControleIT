@@ -42,6 +42,8 @@ export default defineNuxtConfig({
     collectionJob: '',
     // NUXT_COLLECTION_RUN_ID : posé uniquement par le lancement du Job (le conteneur exécute cette collecte puis s'arrête).
     collectionRunId: '',
+    // NUXT_GANDI_TOKEN : jeton d'accès personnel Gandi (lecture des noms de domaine de l'organisation).
+    gandiToken: '',
     public: {}
   },
 

@@ -1,20 +1,21 @@
 <script setup lang="ts">
 /**
  * Ressource d'une ligne : élément SharePoint (icône du type, nom avec lien SharePoint, chemin) ou boîte partagée
- * (nom, adresse, tenant). Données collectées, jamais de v-html.
+ * (nom, adresse, tenant) ou nom de domaine (titulaire). Données collectées, jamais de v-html.
  */
 const props = withDefaults(defineProps<{ data: Record<string, string>, label?: string, large?: boolean }>(), { label: '', large: false })
 
 const ICONS: Record<string, string> = { Bibliothèque: 'i-lucide-library', Dossier: 'i-lucide-folder', Fichier: 'i-lucide-file-text' }
 
 const mailbox = computed(() => !!props.data.mailbox)
-const path = computed(() => mailbox.value ? props.data.mailboxName || props.data.mailbox! : props.data.resource ?? props.label)
+const domain = computed(() => !!props.data.domain)
+const path = computed(() => domain.value ? props.data.domain! : mailbox.value ? props.data.mailboxName || props.data.mailbox! : props.data.resource ?? props.label)
 const parts = computed(() => path.value.split(' / '))
 const name = computed(() => parts.value.at(-1) ?? path.value)
-const parent = computed(() => mailbox.value ? [props.data.mailbox, props.data.tenant].filter(Boolean).join(' · ') : parts.value.slice(0, -1).join(' / '))
-const icon = computed(() => mailbox.value ? 'i-lucide-inbox' : ICONS[props.data.resourceType ?? ''] ?? 'i-lucide-file')
-const link = computed(() => mailbox.value ? null : sharepointLink(props.data))
-const kind = computed(() => mailbox.value ? 'Boîte partagée' : props.data.resourceType)
+const parent = computed(() => domain.value ? props.data.domainOwner ?? '' : mailbox.value ? [props.data.mailbox, props.data.tenant].filter(Boolean).join(' · ') : parts.value.slice(0, -1).join(' / '))
+const icon = computed(() => domain.value ? 'i-lucide-globe' : mailbox.value ? 'i-lucide-inbox' : ICONS[props.data.resourceType ?? ''] ?? 'i-lucide-file')
+const link = computed(() => mailbox.value || domain.value ? null : sharepointLink(props.data))
+const kind = computed(() => domain.value ? 'Nom de domaine' : mailbox.value ? 'Boîte partagée' : props.data.resourceType)
 </script>
 
 <template>

@@ -3,6 +3,7 @@ import type { TableColumn } from '@nuxt/ui'
 import ShareBeneficiary from '~/components/ShareBeneficiary.vue'
 import ShareResource from '~/components/ShareResource.vue'
 import { responseSchema } from '#shared/schemas/checks'
+import { decisionWording, type Decision } from '#shared/decisions'
 
 const UButton = resolveComponent('UButton')
 const UBadge = resolveComponent('UBadge')
@@ -10,27 +11,30 @@ const toast = useToast()
 
 const { data: checks, status, refresh } = await useFetch('/api/me/checks', { default: () => [] })
 type Check = (typeof checks.value)[number]
-type Decision = 'keep' | 'remove' | 'reassign'
-
 const todo = computed(() => checks.value.filter(c => !c.decision && c.sessionStatus === 'open'))
 const done = computed(() => checks.value.filter(c => c.decision))
 
-const CHOICES: { value: Decision, label: string, description: string, placeholder: string, icon: string, color: 'success' | 'error' | 'warning' }[] = [
-  { value: 'keep', label: 'Valider le partage', description: 'Le partage est légitime et doit être conservé.', placeholder: 'Pourquoi ce partage est-il nécessaire ?', icon: 'i-lucide-shield-check', color: 'success' },
-  { value: 'remove', label: 'Arrêter le partage', description: 'L\'IT retirera cet accès.', placeholder: 'Pourquoi ce partage doit-il être arrêté ?', icon: 'i-lucide-shield-x', color: 'error' },
-  { value: 'reassign', label: 'Mauvaise attribution', description: 'Cette ligne ne me concerne pas : elle repart à l\'IT.', placeholder: 'Qui devrait répondre à ma place ?', icon: 'i-lucide-user-round-x', color: 'warning' }
-]
-const choiceOf = (decision: Decision | null | undefined) => CHOICES.find(c => c.value === decision)
+/** Choix de réponse, avec le vocabulaire du modèle de la ligne (partage, accès, nom de domaine). */
+const STYLES: Record<Decision, { icon: string, color: 'success' | 'error' | 'warning' }> = {
+  keep: { icon: 'i-lucide-shield-check', color: 'success' },
+  remove: { icon: 'i-lucide-shield-x', color: 'error' },
+  reassign: { icon: 'i-lucide-user-round-x', color: 'warning' }
+}
+function choicesFor(template?: string) {
+  return (['keep', 'remove', 'reassign'] as const).map(value => ({ value, ...STYLES[value], ...decisionWording(value, template) }))
+}
+const choiceOf = (decision: Decision | null | undefined, template?: string) => choicesFor(template).find(c => c.value === decision)
 
 // Fenêtre de réponse
 const current = ref<Check | null>(null)
 const form = reactive<{ decision: Decision | undefined, comment: string }>({ decision: undefined, comment: '' })
 const saving = ref(false)
-const choice = computed(() => choiceOf(form.decision))
+const choices = computed(() => choicesFor(current.value?.template))
+const choice = computed(() => choiceOf(form.decision, current.value?.template))
 const canSubmit = computed(() => responseSchema.safeParse({ decision: form.decision, comment: form.comment }).success)
 
 /** Informations complémentaires de la ligne (la ressource et le bénéficiaire sont affichés à part). */
-const DETAIL_ICONS: Record<string, string> = { 'Tenant': 'i-lucide-building-2', 'Site': 'i-lucide-globe', 'Expiration': 'i-lucide-calendar-clock', 'Partagé par': 'i-lucide-user-pen' }
+const DETAIL_ICONS: Record<string, string> = { 'Tenant': 'i-lucide-building-2', 'Site': 'i-lucide-globe', 'Expiration': 'i-lucide-calendar-clock', 'Échéance': 'i-lucide-calendar-clock', 'Renouvellement automatique': 'i-lucide-refresh-cw', 'Titulaire du domaine': 'i-lucide-building', 'Partagé par': 'i-lucide-user-pen' }
 const details = computed(() => current.value ? itemFields(current.value.data).filter(f => f.label in DETAIL_ICONS) : [])
 
 function openResponse(check: Check) {
@@ -59,15 +63,15 @@ async function submit() {
 
 const columns: TableColumn<Check>[] = [
   { accessorKey: 'sessionName', header: 'Campagne', cell: ({ row }) => h('span', { class: 'font-medium' }, row.original.sessionName) },
-  { id: 'resource', header: 'Ressource partagée', cell: ({ row }) => h('div', { class: 'min-w-64 max-w-md' }, [h(ShareResource, { data: row.original.data, label: row.original.label })]) },
-  { id: 'beneficiary', header: 'Partagé avec', cell: ({ row }) => h('div', { class: 'min-w-56 max-w-xs' }, [h(ShareBeneficiary, { data: row.original.data })]) },
+  { id: 'resource', header: 'Élément à vérifier', cell: ({ row }) => h('div', { class: 'min-w-64 max-w-md' }, [h(ShareResource, { data: row.original.data, label: row.original.label })]) },
+  { id: 'beneficiary', header: 'Accès ou échéance', cell: ({ row }) => h('div', { class: 'min-w-56 max-w-xs' }, [h(ShareBeneficiary, { data: row.original.data })]) },
   {
     accessorKey: 'decision',
     header: 'Réponse',
     cell: ({ row }) => {
-      const c = choiceOf(row.original.decision)
+      const c = choiceOf(row.original.decision, row.original.template)
       return c
-        ? h(UBadge, { color: c.color, variant: 'soft', icon: c.icon, label: DECISION_LABELS[c.value] })
+        ? h(UBadge, { color: c.color, variant: 'soft', icon: c.icon, label: c.state })
         : h(UBadge, { color: 'neutral', variant: 'soft', icon: 'i-lucide-hourglass', label: 'À faire' })
     }
   },
@@ -102,7 +106,7 @@ const tableUi = { th: 'whitespace-nowrap', td: 'whitespace-normal align-top py-4
       <div>
         <h1 class="text-2xl font-semibold">Mes vérifications</h1>
         <p class="text-muted">
-          Pour chaque partage externe, validez-le, demandez son arrêt, ou signalez qu'il ne vous concerne pas.
+          Pour chaque ligne (partage externe, accès à une boîte partagée, nom de domaine), confirmez-la, demandez son arrêt, ou signalez qu'elle ne vous concerne pas.
           Un commentaire est toujours demandé.
         </p>
       </div>
@@ -166,7 +170,7 @@ const tableUi = { th: 'whitespace-nowrap', td: 'whitespace-normal align-top py-4
               indicator="hidden"
               orientation="horizontal"
               :color="choice?.color ?? 'primary'"
-              :items="CHOICES.map(c => ({ label: c.label, description: c.description, value: c.value, icon: c.icon }))"
+              :items="choices.map(c => ({ label: c.action, description: c.description, value: c.value, icon: c.icon }))"
               :ui="{ fieldset: 'grid gap-3 sm:grid-cols-3', item: 'items-start p-4', legend: 'mb-3 font-medium', icon: 'size-7 mb-1' }"
             />
             <UFormField v-if="choice" label="Commentaire (obligatoire)" :hint="`${form.comment.length}/2000`">

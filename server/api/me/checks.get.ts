@@ -24,6 +24,7 @@ export default defineEventHandler(async (event) => {
     sessionId: controlSessions.id,
     sessionName: controlSessions.name,
     sessionStatus: controlSessions.status,
+    template: controlSessions.template,
     dueDate: controlSessions.dueDate
   })
     .from(checkItems)
