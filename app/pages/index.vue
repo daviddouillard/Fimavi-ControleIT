@@ -34,7 +34,7 @@ const choice = computed(() => choiceOf(form.decision, current.value?.template))
 const canSubmit = computed(() => responseSchema.safeParse({ decision: form.decision, comment: form.comment }).success)
 
 /** Informations complémentaires de la ligne (la ressource et le bénéficiaire sont affichés à part). */
-const DETAIL_ICONS: Record<string, string> = { 'Tenant': 'i-lucide-building-2', 'Site': 'i-lucide-globe', 'Expiration': 'i-lucide-calendar-clock', 'Échéance': 'i-lucide-calendar-clock', 'Renouvellement automatique': 'i-lucide-refresh-cw', 'Titulaire du domaine': 'i-lucide-building', 'Partagé par': 'i-lucide-user-pen' }
+const DETAIL_ICONS: Record<string, string> = { 'Tenant': 'i-lucide-building-2', 'Site': 'i-lucide-globe', 'Expiration': 'i-lucide-calendar-clock', 'Échéance': 'i-lucide-calendar-clock', 'Renouvellement automatique': 'i-lucide-refresh-cw', 'Titulaire du domaine': 'i-lucide-building', 'Type de service': 'i-lucide-tag', 'Offre': 'i-lucide-package', 'Autres noms couverts': 'i-lucide-list', 'Domaine principal': 'i-lucide-globe', 'Partagé par': 'i-lucide-user-pen' }
 const details = computed(() => current.value ? itemFields(current.value.data).filter(f => f.label in DETAIL_ICONS) : [])
 
 function openResponse(check: Check) {
@@ -106,7 +106,7 @@ const tableUi = { th: 'whitespace-nowrap', td: 'whitespace-normal align-top py-4
       <div>
         <h1 class="text-2xl font-semibold">Mes vérifications</h1>
         <p class="text-muted">
-          Pour chaque ligne (partage externe, accès à une boîte partagée, nom de domaine), confirmez-la, demandez son arrêt, ou signalez qu'elle ne vous concerne pas.
+          Pour chaque ligne (partage externe, accès à une boîte partagée, service Gandi), confirmez-la, demandez son arrêt, ou signalez qu'elle ne vous concerne pas.
           Un commentaire est toujours demandé.
         </p>
       </div>

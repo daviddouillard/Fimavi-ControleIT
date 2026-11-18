@@ -31,7 +31,11 @@ const AUDIT_ACTIONS: Record<string, string> = {
 /** Champs d'une ligne collectée, dans l'ordre d'affichage (les champs absents ne sont pas affichés). */
 const ITEM_FIELDS: [key: string, label: string][] = [
   ['tenant', 'Tenant'],
-  ['domain', 'Nom de domaine'],
+  ['gandiKind', 'Type de service'],
+  ['domain', 'Nom'],
+  ['product', 'Offre'],
+  ['altnames', 'Autres noms couverts'],
+  ['hostingDomain', 'Domaine principal'],
   ['domainExpiresAt', 'Échéance'],
   ['autorenew', 'Renouvellement automatique'],
   ['domainOwner', 'Titulaire du domaine'],

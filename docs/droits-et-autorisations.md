@@ -73,16 +73,18 @@ Lecture seule, dans chaque tenant analysé :
 - Service utilisé : `https://outlook.office365.com/adminapi/beta/<tenant>/InvokeCommand`, celui du module PowerShell officiel ExchangeOnlineManagement. Il n'est pas documenté publiquement par Microsoft et peut évoluer : en cas de panne, le bouton « Tester Exchange » des paramètres le signale.
 - « Lecteur général » donne une lecture de toute la configuration Microsoft 365 du tenant, sans le contenu des emails ni des fichiers. Une piste plus restreinte est un groupe de rôles Exchange limité à « View-Only Recipients », attribué au principal de service. Elle sera à valider une fois le module en service.
 
-### 3.3 Gandi : lecture des noms de domaine (modèle « Noms de domaine »)
+### 3.3 Gandi : lecture des domaines, certificats et hébergements (modèle « Services Gandi »)
 
 | Élément | Valeur | Valider |
 |---|---|---|
 | Jeton | Jeton d'accès personnel (PAT) Gandi, limité à **une organisation** | ☐ |
-| Droit du jeton | Voir les noms de domaine (le moins de droits possible proposé par Gandi) ; aucun droit technique, DNS, facturation ni gestion | ☐ |
+| Droits du jeton | « Voir et renouveler les domaines », « Voir et télécharger les certificats SSL », « Voir et renouveler les instances Web Hosting » : Gandi ne propose pas de droit en lecture seule pour ces services. Aucun droit technique, DNS, facturation ni gestion. « Voir les ressources Cloud » n'est pas utilisé : à retirer du jeton | ☐ |
 | Durée | La plus courte acceptable (1 an au plus) ; date de fin notée pour le renouveler | ☐ |
 | Stockage | Secret Manager `controleit-gandi-token`, lu par le compte `controleit-run` ; variable GitHub `GANDI_TOKEN_SECRET` = nom du secret | ☐ |
 
-- L'application ne fait que des lectures (`GET https://api.gandi.net/v5/domain/domains`) ; le jeton n'est envoyé qu'à `https://api.gandi.net/v5/` (`server/utils/gandi.ts`).
+- L'application ne fait que des lectures (`GET` sur `domain/domains`, `certificate/issued-certs`, `simplehosting/instances`) ; elle n'appelle jamais de renouvellement. Le jeton n'est envoyé qu'à `https://api.gandi.net/v5/` (`server/utils/gandi.ts`).
+- Les serveurs GandiCloud (VPS) ne sont pas lus : ils passent par l'API OpenStack, avec d'autres identifiants que le jeton Gandi.
+- Certificats expirés, révoqués ou remplacés et hébergements en cours de suppression : ignorés (rien à renouveler).
 - Le jeton n'est jamais renvoyé au navigateur : les paramètres indiquent seulement s'il est configuré.
 - « Ne plus renouveler » crée une action pour l'IT, qui désactive le renouvellement automatique **à la main** dans Gandi.
 
@@ -183,6 +185,6 @@ Détail dans `docs/base-de-donnees.md` et `scripts/db-grants.mjs`.
 | `controleit-database-url` | Connexion du rôle `controleit_app` |
 | `controleit-entra-client-secret` | Secret client de l'application Entra (à renouveler avant expiration) |
 | `controleit-db-owner-password` / `controleit-db-app-password` | Mots de passe des rôles de base |
-| `controleit-gandi-token` | Jeton d'accès personnel Gandi (modèle « Noms de domaine ») : **expire au plus tard au bout d'un an**, à renouveler dans Gandi puis ici |
+| `controleit-gandi-token` | Jeton d'accès personnel Gandi (modèle « Services Gandi ») : **expire au plus tard au bout d'un an**, à renouveler dans Gandi puis ici |
 
 Aucun secret n'est dans le code ni dans le dépôt GitHub.

@@ -133,15 +133,20 @@ async function testExchange(id: string) {
   }
 }
 
-// Test du jeton Gandi (modèle « Noms de domaine »).
+// Test du jeton Gandi (modèle « Services Gandi »).
 const testingGandi = ref(false)
 async function testGandi() {
   testingGandi.value = true
   try {
-    const r = await $fetch<{ ok: boolean, domains?: number, message?: string }>('/api/admin/settings/gandi/test', { method: 'POST' })
+    const r = await $fetch<{ ok: boolean, domains?: number, certificates?: number, hostings?: number, message?: string }>('/api/admin/settings/gandi/test', { method: 'POST' })
+    const counts = [
+      r.domains === undefined ? null : `${r.domains} nom(s) de domaine`,
+      r.certificates === undefined ? null : `${r.certificates} certificat(s) SSL`,
+      r.hostings === undefined ? null : `${r.hostings} hébergement(s) web`
+    ].filter(Boolean).join(', ')
     toast.add(r.ok
-      ? { title: 'Gandi OK', description: `${r.domains} nom(s) de domaine lisible(s).`, color: 'success' }
-      : { title: 'Gandi inaccessible', description: r.message, color: 'error', duration: 15000 })
+      ? { title: 'Gandi OK', description: `Lisibles : ${counts}.`, color: 'success' }
+      : { title: counts ? 'Gandi partiellement accessible' : 'Gandi inaccessible', description: [counts && `Lisibles : ${counts}.`, r.message].filter(Boolean).join(' '), color: 'error', duration: 15000 })
   } finally {
     testingGandi.value = false
   }
@@ -171,9 +176,9 @@ const sitesOf = (connectionId: string) => (settings.value?.sites ?? []).filter(s
 
     <UCard>
       <template #header>
-        <h2 class="font-medium">Gandi (noms de domaine)</h2>
+        <h2 class="font-medium">Gandi (domaines, certificats, hébergements)</h2>
         <p class="text-sm text-muted">
-          Lecture seule des noms de domaine de l'organisation Gandi et de leur échéance, avec un jeton d'accès personnel Gandi.
+          Lecture seule des noms de domaine, certificats SSL et hébergements web de l'organisation Gandi et de leur échéance, avec un jeton d'accès personnel Gandi.
           Le jeton se configure dans Secret Manager (NUXT_GANDI_TOKEN), jamais ici, et expire au plus tard au bout d'un an.
         </p>
       </template>

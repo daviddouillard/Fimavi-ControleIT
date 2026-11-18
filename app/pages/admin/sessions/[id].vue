@@ -64,7 +64,7 @@ const typeFilter = ref<string[]>([])
 /** Valeurs distinctes d'un champ, triées, pour les listes de filtres. */
 const distinct = (pick: (item: Item) => string | null | undefined) =>
   [...new Set((data.value?.items ?? []).map(pick).filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b, 'fr'))
-const placeOf = (item: Item) => item.data.site ?? item.data.tenant ?? (item.data.tld ? `.${item.data.tld}` : undefined)
+const placeOf = (item: Item) => item.data.site ?? item.data.tenant ?? item.data.gandiKind ?? (item.data.tld ? `Domaine .${item.data.tld}` : undefined)
 const accessOf = (item: Item) => item.data.access ?? item.data.right ?? (item.data.autorenew ? `Renouvellement auto ${item.data.autorenew.toLowerCase()}` : undefined)
 const siteOptions = computed(() => distinct(placeOf))
 const assigneeOptions = computed(() => [NO_ASSIGNEE, ...distinct(i => i.assigneeName)])
@@ -84,7 +84,7 @@ const matchesState = (item: Item) => {
   }
 }
 const inList = (selected: string[], value: string | null | undefined) => !selected.length || selected.includes(value ?? '')
-const searchText = (item: Item) => [item.label, item.data.resource, item.data.beneficiary, item.data.site, item.data.mailbox, item.data.mailboxName, item.data.trustee, item.data.trusteeName, item.data.right, item.data.domain, item.data.domainOwner, item.data.sharedBy, item.data.suggestedValidatorName, item.assigneeName, item.comment]
+const searchText = (item: Item) => [item.label, item.data.resource, item.data.beneficiary, item.data.site, item.data.mailbox, item.data.mailboxName, item.data.trustee, item.data.trusteeName, item.data.right, item.data.domain, item.data.domainOwner, item.data.gandiKind, item.data.product, item.data.altnames, item.data.hostingDomain, item.data.sharedBy, item.data.suggestedValidatorName, item.assigneeName, item.comment]
   .filter(Boolean).join(' ').toLocaleLowerCase('fr')
 
 // Tri par colonne (clic sur l'en-tête : croissant, puis décroissant).
@@ -179,10 +179,10 @@ const columns: TableColumn<Item>[] = [
     })
   },
   { accessorKey: 'rowNumber', header: sortHeader('#', 'rowNumber') },
-  { id: 'site', header: () => sortHeader(isMailboxes.value ? 'Tenant' : isDomains.value ? 'Extension' : 'Site', 'site')(), cell: ({ row }) => h('span', { class: 'whitespace-nowrap font-medium' }, placeOf(row.original) ?? '—') },
+  { id: 'site', header: () => sortHeader(isMailboxes.value ? 'Tenant' : isDomains.value ? 'Type' : 'Site', 'site')(), cell: ({ row }) => h('span', { class: 'whitespace-nowrap font-medium' }, placeOf(row.original) ?? '—') },
   {
     id: 'resource',
-    header: () => sortHeader(isMailboxes.value ? 'Boîte partagée' : isDomains.value ? 'Nom de domaine' : 'Ressource', 'resource')(),
+    header: () => sortHeader(isMailboxes.value ? 'Boîte partagée' : isDomains.value ? 'Nom' : 'Ressource', 'resource')(),
     cell: ({ row }) => h('div', { class: 'min-w-64 max-w-md 2xl:max-w-xl' }, [h(ShareResource, { data: row.original.data, label: row.original.label })])
   },
   {
@@ -479,7 +479,7 @@ function sendEmails() {
     <UCard v-if="run">
       <template #header>
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <h2 class="font-medium">{{ isMailboxes ? 'Lecture des accès aux boîtes partagées' : isDomains ? 'Lecture des noms de domaine Gandi' : 'Collecte des partages' }}</h2>
+          <h2 class="font-medium">{{ isMailboxes ? 'Lecture des accès aux boîtes partagées' : isDomains ? 'Lecture des services Gandi' : 'Collecte des partages' }}</h2>
           <UButton
             v-if="session.status === 'draft' && run.status !== 'running'"
             icon="i-lucide-refresh-cw"

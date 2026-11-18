@@ -3,7 +3,7 @@ import { z } from 'zod'
 export const CONTROL_TEMPLATES = {
   'sharepoint-external': 'Droits SharePoint externes',
   'exchange-shared-mailboxes': 'Accès aux boîtes partagées',
-  'gandi-domains': 'Noms de domaine (Gandi)'
+  'gandi-domains': 'Services Gandi (domaines, certificats, hébergements)'
 } as const
 
 export type ControlTemplate = keyof typeof CONTROL_TEMPLATES

@@ -22,8 +22,8 @@ const WORDINGS: Record<string, Record<'keep' | 'remove', DecisionWording>> = {
     remove: { action: 'Retirer l\'accès', state: 'Accès à retirer', description: 'L\'IT retirera cet accès.', placeholder: 'Pourquoi cet accès doit-il être retiré ?' }
   },
   'gandi-domains': {
-    keep: { action: 'Renouveler le domaine', state: 'À renouveler', description: 'Le domaine sert toujours : il doit être renouvelé.', placeholder: 'À quoi sert ce domaine ?' },
-    remove: { action: 'Ne plus renouveler', state: 'À ne plus renouveler', description: 'L\'IT désactivera le renouvellement : le domaine expirera à son échéance.', placeholder: 'Pourquoi ce domaine n\'est-il plus utile ?' }
+    keep: { action: 'Renouveler', state: 'À renouveler', description: 'Le service sert toujours : il doit être renouvelé.', placeholder: 'À quoi sert ce domaine, certificat ou hébergement ?' },
+    remove: { action: 'Ne plus renouveler', state: 'À ne plus renouveler', description: 'L\'IT désactivera le renouvellement : le service expirera à son échéance.', placeholder: 'Pourquoi n\'est-il plus utile ?' }
   }
 }
 

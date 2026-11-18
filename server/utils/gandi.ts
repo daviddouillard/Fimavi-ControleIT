@@ -2,14 +2,16 @@ import { z } from 'zod'
 import { GraphError, MAX_ATTEMPTS, retryDelay, sleep } from './graph'
 
 /**
- * API Gandi v5 en lecture : liste des noms de domaine de l'organisation et leur échéance.
+ * API Gandi v5 en lecture : noms de domaine, certificats SSL et hébergements web de l'organisation, avec leur échéance.
  * Jeton d'accès personnel (PAT) Gandi, limité à une organisation, en variable d'environnement NUXT_GANDI_TOKEN
  * (Secret Manager en production). L'application ne modifie jamais rien chez Gandi.
  */
 export const GANDI_ROOT = 'https://api.gandi.net/v5/'
 const DOMAINS_URL = `${GANDI_ROOT}domain/domains`
+const CERTIFICATES_URL = `${GANDI_ROOT}certificate/issued-certs`
+const HOSTINGS_URL = `${GANDI_ROOT}simplehosting/instances`
 const PER_PAGE = 100
-/** Garde-fou contre une pagination sans fin (100 000 domaines). */
+/** Garde-fou contre une pagination sans fin (100 000 éléments). */
 const MAX_PAGES = 1000
 
 export class GandiError extends GraphError {}
@@ -26,8 +28,32 @@ const domainSchema = z.object({
 }).loose()
 export type GandiDomain = z.infer<typeof domainSchema>
 
+const certificateSchema = z.object({
+  id: z.string().min(1),
+  cn: z.string().min(1),
+  cn_unicode: z.string().nullish(),
+  altnames: z.array(z.string()).nullish(),
+  status: z.string().nullish(),
+  package: z.object({ name: z.string().nullish(), name_label: z.string().nullish() }).loose().nullish(),
+  dates: z.object({ ends_at: z.string().nullish() }).loose().nullish()
+}).loose()
+export type GandiCertificate = z.infer<typeof certificateSchema>
+
+const hostingSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  status: z.string().nullish(),
+  size: z.string().nullish(),
+  expire_at: z.string().nullish(),
+  domain: z.string().nullish(),
+  autorenew: z.object({}).loose().nullish()
+}).loose()
+export type GandiHosting = z.infer<typeof hostingSchema>
+
 export interface GandiClient {
   listDomains: () => Promise<GandiDomain[]>
+  listCertificates: () => Promise<GandiCertificate[]>
+  listHostings: () => Promise<GandiHosting[]>
 }
 
 export function gandiClient(token: string, deps: { fetch?: typeof fetch } = {}): GandiClient {
@@ -49,27 +75,32 @@ export function gandiClient(token: string, deps: { fetch?: typeof fetch } = {}):
     }
   }
 
-  return {
-    async listDomains() {
-      const domains: GandiDomain[] = []
-      for (let page = 1; page <= MAX_PAGES; page++) {
-        const res = await get(`${DOMAINS_URL}?per_page=${PER_PAGE}&page=${page}`)
-        const items = z.array(domainSchema).parse(await res.json())
-        domains.push(...items)
-        const total = Number(res.headers.get('Total-Count'))
-        if (items.length < PER_PAGE || (Number.isFinite(total) && total > 0 && domains.length >= total)) break
-      }
-      return domains
+  /** Lit toutes les pages d'une liste (URL construite par l'application, jamais reprise de la réponse). */
+  async function list<T>(baseUrl: string, schema: z.ZodType<T>): Promise<T[]> {
+    const all: T[] = []
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const res = await get(`${baseUrl}?per_page=${PER_PAGE}&page=${page}`)
+      const items = z.array(schema).parse(await res.json())
+      all.push(...items)
+      const total = Number(res.headers.get('Total-Count'))
+      if (items.length < PER_PAGE || (Number.isFinite(total) && total > 0 && all.length >= total)) break
     }
+    return all
+  }
+
+  return {
+    listDomains: () => list(DOMAINS_URL, domainSchema),
+    listCertificates: () => list(CERTIFICATES_URL, certificateSchema),
+    listHostings: () => list(HOSTINGS_URL, hostingSchema)
   }
 }
 
-/** Message compréhensible pour l'IT en cas d'échec de lecture Gandi. */
-export function gandiAccessMessage(error: unknown): string {
+/** Message compréhensible pour l'IT en cas d'échec de lecture Gandi ; `what` : ce que le jeton doit pouvoir voir. */
+export function gandiAccessMessage(error: unknown, what = 'les noms de domaine'): string {
   if (error instanceof GandiError) {
     if (error.status === 0) return error.message
     if (error.status === 401 || error.status === 403) {
-      return 'Jeton Gandi refusé : il a expiré, a été révoqué ou n\'a pas le droit de voir les noms de domaine. Créez un nouveau jeton dans Gandi et mettez-le à jour dans Secret Manager.'
+      return `Jeton Gandi refusé : il a expiré, a été révoqué ou n'a pas le droit de voir ${what}. Créez un nouveau jeton dans Gandi et mettez-le à jour dans Secret Manager.`
     }
     return error.message
   }

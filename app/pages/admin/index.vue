@@ -198,7 +198,7 @@ const kpis = computed(() => [
           <UIcon name="i-lucide-shield-x" class="size-5 text-error" />
           <h2 class="text-lg font-semibold">Actions à faire ({{ remediations.length }})</h2>
         </div>
-        <p class="text-sm text-muted">Retirez l'accès dans SharePoint ou Exchange, ou désactivez le renouvellement du domaine chez Gandi, puis cliquez sur « Fait ».</p>
+        <p class="text-sm text-muted">Retirez l'accès dans SharePoint ou Exchange, ou désactivez le renouvellement chez Gandi, puis cliquez sur « Fait ».</p>
       </div>
       <div v-if="!remediations.length" class="flex items-center gap-3 rounded-xl border border-dashed border-default p-5 text-muted">
         <UIcon name="i-lucide-party-popper" class="size-6" /> Rien à retirer pour le moment.
@@ -261,7 +261,7 @@ const kpis = computed(() => [
             {{ isMailboxes
               ? 'La lecture des accès aux boîtes partagées (accès total, envoyer en tant que, envoyer de la part de) démarre dès la création.'
               : isDomains
-                ? 'La lecture de tous les noms de domaine Gandi et de leur échéance démarre dès la création. Chaque valideur dira s’il faut continuer à renouveler le domaine.'
+                ? 'La lecture des noms de domaine, certificats SSL et hébergements web Gandi, avec leur échéance, démarre dès la création. Chaque valideur dira s’il faut continuer à les renouveler.'
                 : 'La recherche des partages externes démarre dès la création.' }}
           </p>
         </form>
@@ -273,7 +273,7 @@ const kpis = computed(() => [
           :loading="creating"
           :disabled="!canCreate"
         >
-          {{ isMailboxes ? 'Créer et lire les accès' : isDomains ? 'Créer et lire les domaines' : 'Créer et rechercher les partages' }}
+          {{ isMailboxes ? 'Créer et lire les accès' : isDomains ? 'Créer et lire les services Gandi' : 'Créer et rechercher les partages' }}
         </UButton>
       </template>
     </UModal>

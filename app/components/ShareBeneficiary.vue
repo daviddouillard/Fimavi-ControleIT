@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * Bénéficiaire d'un partage (nom, adresse, type d'accès et droit), titulaire d'un accès à une boîte partagée,
- * ou échéance d'un nom de domaine (date, renouvellement automatique).
+ * ou échéance d'un service Gandi (date, renouvellement automatique).
  */
 const props = defineProps<{ data: Record<string, string> }>()
 

@@ -4,7 +4,7 @@ import { FIELD_NAME, FIELD_PENDING, textToDoc, type RichNode } from './richText'
 
 const SUBJECTS: Record<string, string> = {
   'exchange-shared-mailboxes': 'accès aux boîtes partagées',
-  'gandi-domains': 'noms de domaine à renouveler ?'
+  'gandi-domains': 'services Gandi à renouveler ?'
 }
 
 export const defaultEmailSubject = (sessionName: string, template?: string) =>
@@ -41,17 +41,17 @@ export const DEFAULT_MAILBOX_EMAIL_MESSAGE = [
   ''
 ].join('\n')
 
-/** Message par défaut du modèle « Noms de domaine (Gandi) ». */
+/** Message par défaut du modèle « Services Gandi » (domaines, certificats, hébergements). */
 export const DEFAULT_DOMAIN_EMAIL_MESSAGE = [
   `Bonjour ${FIELD_NAME},`,
   '',
   FIELD_PENDING,
   '',
-  'Je vous ai confié des noms de domaine du groupe à vérifier : des adresses de sites web ou d\'emails que nous achetons et renouvelons chaque année chez Gandi.',
+  'Je vous ai confié des services Gandi du groupe à vérifier : noms de domaine (adresses de sites web ou d\'emails), certificats SSL et hébergements web, que nous payons et renouvelons chez Gandi.',
   '',
-  'Pourquoi ? Un nom de domaine se renouvelle automatiquement, même quand le site, la marque ou le projet n\'existe plus. Faire le point avant chaque échéance évite de payer pour rien, et de laisser expirer un domaine encore utilisé (site ou emails coupés). Vous êtes le mieux placé pour savoir si ces domaines servent toujours.',
+  'Pourquoi ? Ces services se renouvellent, même quand le site, la marque ou le projet n\'existe plus. Faire le point avant chaque échéance évite de payer pour rien, et de laisser expirer un service encore utilisé (site ou emails coupés). Vous êtes le mieux placé pour savoir s\'ils servent toujours.',
   '',
-  'Ce que je vous demande : pour chaque domaine, indiquez s\'il faut continuer à le renouveler ou non, ou signalez qu\'il ne vous concerne pas. Ajoutez un court commentaire à chaque réponse. Si le domaine n\'est plus utile, je m\'occupe d\'arrêter son renouvellement.',
+  'Ce que je vous demande : pour chaque ligne, indiquez s\'il faut continuer à la renouveler ou non, ou signalez qu\'elle ne vous concerne pas. Ajoutez un court commentaire à chaque réponse. Si un service n\'est plus utile, je m\'occupe d\'arrêter son renouvellement.',
   '',
   'Merci par avance de votre retour.',
   ''
