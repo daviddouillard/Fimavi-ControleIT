@@ -62,7 +62,7 @@ test('la création de session « boîtes partagées » propose les tenants actif
   await page.getByRole('button', { name: 'Renommer le tenant' }).first().click()
   await page.getByRole('textbox', { name: 'Nouveau nom du tenant' }).fill('Fimavi Groupe')
   await page.getByRole('button', { name: 'Enregistrer' }).last().click()
-  await expect(page.getByText('Tenant renommé')).toBeVisible()
+  await expect(page.getByText('Tenant renommé').first()).toBeVisible()
   await expect(page.getByText('Fimavi Groupe')).toBeVisible()
   await page.getByRole('button', { name: 'Renommer le tenant' }).first().click()
   await page.getByRole('textbox', { name: 'Nouveau nom du tenant' }).fill('Fimavi')
