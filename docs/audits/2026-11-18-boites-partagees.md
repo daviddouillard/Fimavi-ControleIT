@@ -47,3 +47,10 @@ Voir `docs/droits-et-autorisations.md` §3.2 :
 2. donner le consentement administrateur ;
 3. attribuer le rôle « Lecteur général » à l'application ;
 4. cliquer sur « Tester Exchange ».
+
+## Exception temporaire sur l'audit des dépendances (décision du 2026-11-18)
+
+- Le pipeline bloquait le déploiement à cause de l'avis `picomatch` **GHSA-fc5q-39xc-vjpf** (élevé), sans version corrigée.
+- Décision de l'IT : accepter cet avis **jusqu'au 2026-12-31**, puisque `picomatch` est absent du serveur déployé.
+- Mise en œuvre : `scripts/audit-gate.mjs` (étape CI et `npm run audit:deps`). Il bloque tout autre avis élevé ou critique. L'exception redevient bloquante à son expiration, et le script signale quand elle n'est plus utile.
+- Vérification locale : seul cet avis est concerné ; résultat « Aucun avis bloquant ».

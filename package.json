@@ -16,7 +16,7 @@
     "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "audit:deps": "npm audit --omit=dev"
+    "audit:deps": "node scripts/audit-gate.mjs"
   },
   "dependencies": {
     "@iconify-json/lucide": "^1.2.153",
