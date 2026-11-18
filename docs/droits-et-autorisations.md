@@ -71,6 +71,14 @@ Lecture seule, dans chaque tenant analysé :
 
 - L'application n'envoie **que** ces trois commandes de lecture : toute autre commande est refusée dans le code (`server/utils/exchange.ts`).
 - Service utilisé : `https://outlook.office365.com/adminapi/beta/<tenant>/InvokeCommand`, celui du module PowerShell officiel ExchangeOnlineManagement. Il n'est pas documenté publiquement par Microsoft et peut évoluer : en cas de panne, le bouton « Tester Exchange » des paramètres le signale.
+**État au 2026-11-18** :
+
+| Tenant | `Exchange.ManageAsApp` consentie | « Lecteur général » attribué (actif, permanent) | « Tester Exchange » |
+|---|---|---|---|
+| Fimavi (`9f74a43a-…`) | Oui (vérifié) | Oui (vérifié le 2026-11-18) | À refaire après propagation (jusqu'à 1 h) |
+| Beaufils Solaire (`7b4fd49d-…`) | Consentement à confirmer | Attribué par l'IT, non vérifié par l'application | À refaire après propagation (jusqu'à 1 h) |
+
+- Le rôle doit être attribué en **Actif** et **permanent** : une attribution « Éligible » (PIM) ne fonctionne pas pour une application. Sans le rôle, Exchange répond 403, même avec la permission consentie.
 - « Lecteur général » donne une lecture de toute la configuration Microsoft 365 du tenant, sans le contenu des emails ni des fichiers. Une piste plus restreinte est un groupe de rôles Exchange limité à « View-Only Recipients », attribué au principal de service. Elle sera à valider une fois le module en service.
 
 ### 3.3 Gandi : lecture des domaines, certificats et hébergements (modèle « Services Gandi »)
@@ -87,6 +95,8 @@ Lecture seule, dans chaque tenant analysé :
 - Certificats expirés, révoqués ou remplacés et hébergements en cours de suppression : ignorés (rien à renouveler).
 - Le jeton n'est jamais renvoyé au navigateur : les paramètres indiquent seulement s'il est configuré.
 - « Ne plus renouveler » crée une action pour l'IT, qui désactive le renouvellement automatique **à la main** dans Gandi.
+- **État au 2026-11-18** : jeton « ControleIT » créé dans l'organisation FIMAVI (expire dans un an : à renouveler avant novembre 2027), rangé dans `controleit-gandi-token` (accès `controleit-run` vérifié), variable GitHub posée, service redéployé.
+- Création du secret sous Windows : utiliser une fenêtre PowerShell **non administrateur** (gcloud est installé dans le profil de l'utilisateur) et passer le jeton par un fichier sans retour à la ligne, supprimé ensuite.
 
 ## 4. Utilisateurs de l'application
 
@@ -125,12 +135,12 @@ La gestion des administrateurs se fait **uniquement par le groupe** : ajouter ou
 | Écran | Fonctionnalité | Administrateur IT | Utilisateur |
 |---|---|---|---|
 | **Mes vérifications** | Voir les lignes qui **lui** sont assignées (à faire / déjà répondues) | ✅ | ✅ |
-| | Répondre : valider le partage, l'arrêter, ou signaler une mauvaise attribution (commentaire obligatoire) | ✅ | ✅ |
+| | Répondre : conserver (valider le partage, conserver l'accès, renouveler), arrêter (arrêter le partage, retirer l'accès, ne plus renouveler), ou signaler une mauvaise attribution (commentaire obligatoire) | ✅ | ✅ |
 | | Changer d'avis tant que la session est ouverte | ✅ | ✅ |
 | | Voir les lignes d'un autre valideur | ❌ | ❌ |
 | **Tableau de bord** | Sessions en cours, avancement, réponses en attente | ✅ | ❌ |
 | | Accès à retirer (pot commun IT), bouton « Fait » | ✅ | ❌ |
-| **Session** | Créer une session (choix des sites) et lancer la collecte des partages | ✅ | ❌ |
+| **Session** | Créer une session (partages SharePoint : choix des sites ; boîtes partagées : choix des tenants ; services Gandi) et lancer la collecte | ✅ | ❌ |
 | | Relancer la collecte (session en brouillon) | ✅ | ❌ |
 | | Ouvrir puis clôturer la session | ✅ | ❌ |
 | | Consulter toutes les lignes, avec tris et filtres | ✅ | ❌ |
@@ -141,6 +151,7 @@ La gestion des administrateurs se fait **uniquement par le groupe** : ajouter ou
 | **Paramètres** | Domaines internes du groupe | ✅ | ❌ |
 | | Tenants raccordés (ajout, activation, lien de consentement) | ✅ | ❌ |
 | | Sites SharePoint (ajout, test, activation) | ✅ | ❌ |
+| | Renommer un tenant, tester Exchange, tester Gandi | ✅ | ❌ |
 | | Synchronisation de l'annuaire | ✅ | ❌ |
 
 ### 4.4 Garanties
@@ -155,7 +166,7 @@ La gestion des administrateurs se fait **uniquement par le groupe** : ajouter ou
 | Compte | Rôle | Portée | Usage | Valider |
 |---|---|---|---|---|
 | `controleit-run` (exécution du service et du Job de collecte) | `roles/cloudsql.client` | Projet | Connexion à la base | ☐ |
-| | `roles/secretmanager.secretAccessor` | Secrets `controleit-app-secret`, `controleit-database-url`, `controleit-entra-client-secret` | Lecture des secrets à l'exécution | ☐ |
+| | `roles/secretmanager.secretAccessor` | Secrets `controleit-app-secret`, `controleit-database-url`, `controleit-entra-client-secret`, `controleit-gandi-token` | Lecture des secrets à l'exécution | ☐ |
 | | `roles/run.jobsExecutorWithOverrides` | Job `controleit-collect` uniquement | Lancer une collecte | ☐ |
 | `controleit-deployer` (GitHub Actions) | `roles/run.developer` | Projet | Déployer le service et le Job | ☐ |
 | | `roles/cloudsql.client` | Projet | Migrations de la base | ☐ |
