@@ -100,6 +100,20 @@ async function testSite(id: string) {
   }
 }
 
+// Test Exchange d'un tenant : boîtes partagées lisibles (permission Exchange.ManageAsApp, rôle Lecteur général).
+const testingExchange = ref<string | null>(null)
+async function testExchange(id: string) {
+  testingExchange.value = id
+  try {
+    const r = await $fetch<{ ok: boolean, sharedMailboxes?: number, message?: string }>(`/api/admin/settings/connections/${id}/test-exchange`, { method: 'POST' })
+    toast.add(r.ok
+      ? { title: 'Exchange OK', description: `${r.sharedMailboxes} boîte(s) partagée(s) lisible(s), droits compris.`, color: 'success' }
+      : { title: 'Exchange inaccessible', description: r.message, color: 'error', duration: 15000 })
+  } finally {
+    testingExchange.value = null
+  }
+}
+
 const sitesOf = (connectionId: string) => (settings.value?.sites ?? []).filter(s => s.connectionId === connectionId)
 </script>
 
@@ -145,6 +159,9 @@ const sitesOf = (connectionId: string) => (settings.value?.sites ?? []).filter(s
             </div>
             <UButton v-if="c.tenantId !== settings.homeTenantId" size="sm" variant="outline" icon="i-lucide-link" @click="copy(c.consentUrl)">
               Copier le lien de consentement
+            </UButton>
+            <UButton size="sm" variant="outline" icon="i-lucide-mail" :loading="testingExchange === c.id" @click="testExchange(c.id)">
+              Tester Exchange
             </UButton>
             <USwitch :model-value="c.enabled" :disabled="busy" label="Actif" @update:model-value="v => toggleConnection(c.id, v)" />
             <UButton size="sm" color="error" variant="ghost" icon="i-lucide-trash-2" :disabled="busy || sitesOf(c.id).length > 0" aria-label="Retirer le tenant" @click="deleteConnection(c.id)" />

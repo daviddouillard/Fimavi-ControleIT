@@ -77,13 +77,13 @@ export interface EmailContent {
  * [Prénom Nom] et [Vérifications en attente] sont remplacés pour chaque destinataire. Le nombre de lignes et le lien
  * vers l'application sont toujours présents : sans le champ, ils sont ajoutés en tête. HTML produit par richToHtml.
  */
-export function assignmentEmail(input: { recipientName: string, sessionName: string, pending: number, appUrl: string } & EmailContent): Omit<MailMessage, 'to'> {
-  const body = input.message ?? defaultEmailDoc()
+export function assignmentEmail(input: { recipientName: string, sessionName: string, pending: number, appUrl: string, template?: string } & EmailContent): Omit<MailMessage, 'to'> {
+  const body = input.message ?? defaultEmailDoc(input.template)
   const pendingHtml = `<strong>${escapeHtml(pendingSentence(input.pending, input.sessionName))}</strong><br>`
     + `<a href="${escapeHtml(input.appUrl)}">Accéder à mes vérifications</a>`
   const html = richToHtml(body, { [FIELD_NAME]: escapeHtml(input.recipientName), [FIELD_PENDING]: pendingHtml })
   return {
-    subject: input.subject ?? defaultEmailSubject(input.sessionName),
+    subject: input.subject ?? defaultEmailSubject(input.sessionName, input.template),
     html: richPlainText(body).includes(FIELD_PENDING) ? `<div>${html}</div>` : `<p>${pendingHtml}</p>\n<div>${html}</div>`,
     inlineImages: usedInlineImages(body)
   }
@@ -104,7 +104,7 @@ export async function sendAssignmentEmails(
 ) {
   const extraIds = deps.extraRecipientIds ?? []
   const recipientIds = [...new Set([...validatorIds, ...extraIds])]
-  const [session] = await db.select({ name: controlSessions.name, status: controlSessions.status }).from(controlSessions).where(eq(controlSessions.id, sessionId))
+  const [session] = await db.select({ name: controlSessions.name, status: controlSessions.status, template: controlSessions.template }).from(controlSessions).where(eq(controlSessions.id, sessionId))
   if (!session) throw createError({ status: 404, message: 'Session introuvable' })
   if (session.status !== 'open') throw createError({ status: 409, message: 'Ouvrez la session avant d\'envoyer les emails' })
 
@@ -140,7 +140,7 @@ export async function sendAssignmentEmails(
     let error: string | null = null
     try {
       if (!recipient.address) throw new Error('Adresse email inconnue')
-      await deps.mailer({ to: recipient.address, ...assignmentEmail({ recipientName: greetingName(recipient.givenName, recipient.displayName), sessionName: session.name, pending: recipient.pending, appUrl: deps.appUrl, ...deps.content }) })
+      await deps.mailer({ to: recipient.address, ...assignmentEmail({ recipientName: greetingName(recipient.givenName, recipient.displayName), sessionName: session.name, template: session.template, pending: recipient.pending, appUrl: deps.appUrl, ...deps.content }) })
     } catch (e) {
       status = 'failed'
       error = e instanceof Error ? e.message : 'erreur inconnue'

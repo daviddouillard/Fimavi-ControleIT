@@ -52,3 +52,21 @@ test('la création de session propose les sites actifs, tous pré-cochés', asyn
   await dialog.getByRole('textbox').first().fill('Revue sans site')
   await expect(dialog.getByRole('button', { name: 'Créer et rechercher les partages' })).toBeDisabled()
 })
+
+test('la création de session « boîtes partagées » propose les tenants actifs, tous pré-cochés', async ({ page, baseURL }) => {
+  await loginAs(page.context(), baseURL!, USERS.admin)
+  await page.goto('/admin/settings')
+  await expect(page.getByRole('button', { name: 'Tester Exchange' })).toBeVisible()
+
+  await page.goto('/admin')
+  await page.waitForLoadState('networkidle')
+  await page.getByRole('button', { name: 'Nouvelle session' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByRole('combobox').click()
+  await page.getByRole('option', { name: 'Accès aux boîtes partagées' }).click()
+  await expect(dialog.getByRole('checkbox', { name: /Fimavi/ })).toBeChecked()
+  await dialog.getByRole('textbox').first().fill('Boîtes partagées T4')
+  await expect(dialog.getByRole('button', { name: 'Créer et lire les accès' })).toBeEnabled()
+  await dialog.getByRole('checkbox', { name: /Fimavi/ }).click()
+  await expect(dialog.getByRole('button', { name: 'Créer et lire les accès' })).toBeDisabled()
+})

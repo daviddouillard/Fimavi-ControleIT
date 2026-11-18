@@ -1,15 +1,20 @@
 <script setup lang="ts">
-/** Ressource SharePoint d'une ligne : icône du type, nom (lien SharePoint) et chemin. Données collectées, jamais de v-html. */
+/**
+ * Ressource d'une ligne : élément SharePoint (icône du type, nom avec lien SharePoint, chemin) ou boîte partagée
+ * (nom, adresse, tenant). Données collectées, jamais de v-html.
+ */
 const props = withDefaults(defineProps<{ data: Record<string, string>, label?: string, large?: boolean }>(), { label: '', large: false })
 
 const ICONS: Record<string, string> = { Bibliothèque: 'i-lucide-library', Dossier: 'i-lucide-folder', Fichier: 'i-lucide-file-text' }
 
-const path = computed(() => props.data.resource ?? props.label)
+const mailbox = computed(() => !!props.data.mailbox)
+const path = computed(() => mailbox.value ? props.data.mailboxName || props.data.mailbox! : props.data.resource ?? props.label)
 const parts = computed(() => path.value.split(' / '))
 const name = computed(() => parts.value.at(-1) ?? path.value)
-const parent = computed(() => parts.value.slice(0, -1).join(' / '))
-const icon = computed(() => ICONS[props.data.resourceType ?? ''] ?? 'i-lucide-file')
-const link = computed(() => sharepointLink(props.data))
+const parent = computed(() => mailbox.value ? [props.data.mailbox, props.data.tenant].filter(Boolean).join(' · ') : parts.value.slice(0, -1).join(' / '))
+const icon = computed(() => mailbox.value ? 'i-lucide-inbox' : ICONS[props.data.resourceType ?? ''] ?? 'i-lucide-file')
+const link = computed(() => mailbox.value ? null : sharepointLink(props.data))
+const kind = computed(() => mailbox.value ? 'Boîte partagée' : props.data.resourceType)
 </script>
 
 <template>
@@ -30,9 +35,9 @@ const link = computed(() => sharepointLink(props.data))
         :class="large && 'text-base font-semibold'"
       >{{ name }}</a>
       <p v-else class="font-medium break-words" :class="large && 'text-base font-semibold'">{{ name }}</p>
-      <p v-if="parent || data.resourceType" class="mt-0.5 text-xs text-muted break-words" :title="path">
-        <span v-if="data.resourceType">{{ data.resourceType }}</span>
-        <span v-if="data.resourceType && parent"> · </span>
+      <p v-if="parent || kind" class="mt-0.5 text-xs text-muted break-words" :title="path">
+        <span v-if="kind">{{ kind }}</span>
+        <span v-if="kind && parent"> · </span>
         <span v-if="parent">{{ parent }}</span>
       </p>
     </div>

@@ -1,8 +1,11 @@
 <script setup lang="ts">
-/** Bénéficiaire d'un partage : nom, adresse, type d'accès et droit. */
+/** Bénéficiaire d'un partage (nom, adresse, type d'accès et droit) ou titulaire d'un accès à une boîte partagée. */
 const props = defineProps<{ data: Record<string, string> }>()
 
 const parsed = computed(() => {
+  if (props.data.trustee) {
+    return props.data.trusteeName ? { name: props.data.trusteeName, email: props.data.trustee } : { name: props.data.trustee, email: null }
+  }
   const value = props.data.beneficiary ?? '—'
   const match = value.match(/^(.*?)\s*<([^>]+)>$/)
   return match ? { name: match[1]!, email: match[2]! } : { name: value, email: null }
@@ -30,6 +33,7 @@ const anonymous = computed(() => props.data.access?.includes('Tout le monde'))
           :label="data.access"
         />
         <UBadge v-if="data.role" icon="i-lucide-key-round" color="neutral" variant="soft" size="sm" :label="data.role" />
+        <UBadge v-if="data.right" icon="i-lucide-key-round" :color="data.rightKey === 'full' ? 'warning' : 'neutral'" variant="soft" size="sm" :label="data.right" />
       </div>
     </div>
   </div>

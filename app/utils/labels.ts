@@ -38,6 +38,11 @@ export const DECISION_LABELS = {
 /** Champs d'une ligne collectée, dans l'ordre d'affichage (les champs absents ne sont pas affichés). */
 const ITEM_FIELDS: [key: string, label: string][] = [
   ['tenant', 'Tenant'],
+  ['mailboxName', 'Boîte partagée'],
+  ['mailbox', 'Adresse de la boîte'],
+  ['trusteeName', 'Titulaire'],
+  ['trustee', 'Compte'],
+  ['right', 'Droit sur la boîte'],
   ['site', 'Site'],
   ['resourceType', 'Type'],
   ['resource', 'Ressource'],

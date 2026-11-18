@@ -11,8 +11,10 @@ export default defineEventHandler(async (event) => {
   const { clientId, redirectURL } = useRuntimeConfig().oauth.microsoft
 
   const consentUrl = (tenantId: string) => {
-    const url = new URL(`https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/v2.0/adminconsent`)
-    url.search = new URLSearchParams({ client_id: clientId, scope: 'https://graph.microsoft.com/.default', redirect_uri: redirectURL }).toString()
+    // Point de consentement v1 : il accorde toutes les permissions déclarées sur l'app registration
+    // (Microsoft Graph et Exchange Online), alors que la v2 n'accorde que celles de la ressource demandée.
+    const url = new URL(`https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/adminconsent`)
+    url.search = new URLSearchParams({ client_id: clientId, redirect_uri: redirectURL }).toString()
     return url.toString()
   }
 

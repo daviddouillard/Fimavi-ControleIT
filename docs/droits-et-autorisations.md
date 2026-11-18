@@ -15,6 +15,7 @@ Une seule inscription d'application, **multi-locataire** :
 | `Sites.Read.All` | Application | Lecture des sites SharePoint (bibliothèques, éléments, partages) | ☐ |
 | `Sites.Selected` | Application | Porte le **contrôle total site par site** (voir §2) | ☐ |
 | `AuditLogsQuery-SharePoint.Read.All` | Application | Lecture du journal d'audit **SharePoint uniquement** : retrouver qui a créé chaque partage (180 jours) | ☐ |
+| `Exchange.ManageAsApp` (API « Office 365 Exchange Online ») | Application | Lecture des boîtes partagées et de leurs droits (modèle « Accès aux boîtes partagées ») ; sans effet seule, les droits réels viennent du rôle « Lecteur général » (§3.2) | ☐ |
 
 **Non accordé, volontairement :**
 - `Mail.Send` dans Entra : il permettrait d'envoyer depuis n'importe quelle boîte. L'envoi est limité par Exchange (voir §3).
@@ -57,6 +58,20 @@ Configuré le 2026-11-12. `Test-ServicePrincipalAuthorization` : `InScope = True
 L'application ne peut envoyer **que** depuis `helpdesk@fimavi.com`. Les destinataires possibles sont :
 - les valideurs de la session qui ont des lignes en attente ;
 - au plus 20 personnes de l'annuaire, ajoutées à la main par un admin.
+
+### 3.2 Lecture des boîtes partagées (modèle « Accès aux boîtes partagées »)
+
+Lecture seule, dans chaque tenant analysé :
+
+| Élément | Valeur | Valider |
+|---|---|---|
+| Permission | `Exchange.ManageAsApp` (application), consentie dans le tenant | ☐ |
+| Rôle Entra attribué à l'application | **Lecteur général** (Global Reader) : lecture seule, aucune modification possible | ☐ |
+| Commandes utilisées | `Get-Mailbox` (boîtes partagées, « envoyer de la part de »), `Get-MailboxPermission` (accès total), `Get-RecipientPermission` (envoyer en tant que) | ☐ |
+
+- L'application n'envoie **que** ces trois commandes de lecture : toute autre commande est refusée dans le code (`server/utils/exchange.ts`).
+- Service utilisé : `https://outlook.office365.com/adminapi/beta/<tenant>/InvokeCommand`, celui du module PowerShell officiel ExchangeOnlineManagement. Il n'est pas documenté publiquement par Microsoft et peut évoluer : en cas de panne, le bouton « Tester Exchange » des paramètres le signale.
+- « Lecteur général » donne une lecture de toute la configuration Microsoft 365 du tenant, sans le contenu des emails ni des fichiers. Une piste plus restreinte est un groupe de rôles Exchange limité à « View-Only Recipients », attribué au principal de service. Elle sera à valider une fois le module en service.
 
 ## 4. Utilisateurs de l'application
 

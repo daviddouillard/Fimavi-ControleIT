@@ -2,7 +2,10 @@ import { FIELD_NAME, FIELD_PENDING, textToDoc, type RichNode } from './richText'
 
 /** Email « vous avez des vérifications à faire » : textes par défaut, modifiables par l'admin avant envoi. */
 
-export const defaultEmailSubject = (sessionName: string) => `Contrôles IT : partages externes à vérifier — ${sessionName}`
+const isMailboxes = (template?: string) => template === 'exchange-shared-mailboxes'
+
+export const defaultEmailSubject = (sessionName: string, template?: string) =>
+  `Contrôles IT : ${isMailboxes(template) ? 'accès aux boîtes partagées' : 'partages externes'} à vérifier — ${sessionName}`
 
 export const DEFAULT_EMAIL_MESSAGE = [
   `Bonjour ${FIELD_NAME},`,
@@ -14,6 +17,22 @@ export const DEFAULT_EMAIL_MESSAGE = [
   'Pourquoi ? Un partage n\'expire pas tout seul : il reste ouvert après la fin d\'un projet ou le départ d\'un interlocuteur. Faire le point régulièrement protège nos données et évite qu\'elles restent accessibles à des personnes qui n\'en ont plus besoin. Vous êtes le mieux placé pour savoir si ces accès sont toujours utiles.',
   '',
   'Ce que je vous demande : pour chaque ligne, indiquez si le partage doit être conservé ou arrêté, ou signalez qu\'il ne vous concerne pas. Ajoutez un court commentaire à chaque réponse. Si vous demandez l\'arrêt, je m\'occupe de retirer l\'accès.',
+  '',
+  'Merci par avance de votre retour.',
+  ''
+].join('\n')
+
+/** Message par défaut du modèle « Accès aux boîtes partagées ». */
+export const DEFAULT_MAILBOX_EMAIL_MESSAGE = [
+  `Bonjour ${FIELD_NAME},`,
+  '',
+  FIELD_PENDING,
+  '',
+  'Je vous ai confié des accès à des boîtes aux lettres partagées à vérifier : des personnes qui peuvent lire une boîte partagée (accès total), envoyer des emails en son nom (envoyer en tant que) ou de sa part (envoyer de la part de).',
+  '',
+  'Pourquoi ? Ces accès restent en place après un changement de poste ou un départ : une personne peut continuer à lire les emails d\'un service ou à écrire en son nom sans en avoir besoin. Faire le point régulièrement protège nos échanges et nos données. Vous êtes le mieux placé pour savoir si ces accès sont toujours justifiés.',
+  '',
+  'Ce que je vous demande : pour chaque ligne, indiquez si l\'accès doit être conservé ou retiré, ou signalez qu\'il ne vous concerne pas. Ajoutez un court commentaire à chaque réponse. Si vous demandez le retrait, je m\'occupe de retirer l\'accès.',
   '',
   'Merci par avance de votre retour.',
   ''
@@ -32,10 +51,9 @@ const DEFAULT_SIGNATURE: RichNode[] = [
 /** Débuts de paragraphe mis en gras dans le message par défaut. */
 const BOLD_LEADS = ['Pourquoi ?', 'Ce que je vous demande :']
 
-/** Corps par défaut de l'email : message puis signature, dans un seul document de l'éditeur. */
-
-export const defaultEmailDoc = (): RichNode => {
-  const message = textToDoc(DEFAULT_EMAIL_MESSAGE).content ?? []
+/** Corps par défaut de l'email : message du modèle puis signature, dans un seul document de l'éditeur. */
+export const defaultEmailDoc = (template?: string): RichNode => {
+  const message = textToDoc(isMailboxes(template) ? DEFAULT_MAILBOX_EMAIL_MESSAGE : DEFAULT_EMAIL_MESSAGE).content ?? []
   const content = message.map((paragraph) => {
     const text = paragraph.content?.[0]?.text ?? ''
     const lead = BOLD_LEADS.find(l => text.startsWith(l))

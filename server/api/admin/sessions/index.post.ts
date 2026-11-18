@@ -1,7 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import { createError, defineEventHandler, readValidatedBody, useRuntimeConfig } from 'nuxt/server'
 import { createSessionSchema } from '../../../../shared/schemas/session'
-import { controlSessions, sharepointSites } from '../../../db/schema'
+import { controlSessions, sharepointSites, tenantConnections } from '../../../db/schema'
 import { startCollection } from '../../../services/collection'
 import { launchCollection } from '../../../services/collectionLauncher'
 import { recordAudit } from '../../../utils/audit'
@@ -15,17 +15,24 @@ export default defineEventHandler(async (event) => {
   const db = useDb()
 
   const session = await db.transaction(async (tx) => {
-    const siteIds = input.siteIds ?? []
+    // Seules les données du modèle choisi sont retenues.
+    const siteIds = input.template === 'sharepoint-external' ? input.siteIds ?? [] : []
+    const connectionIds = input.template === 'exchange-shared-mailboxes' ? input.connectionIds ?? [] : []
     if (siteIds.length) {
       const found = await tx.select({ id: sharepointSites.id }).from(sharepointSites)
         .where(and(inArray(sharepointSites.id, siteIds), eq(sharepointSites.enabled, true)))
       if (found.length !== siteIds.length) throw createError({ status: 400, message: 'Site inconnu ou désactivé' })
     }
+    if (connectionIds.length) {
+      const found = await tx.select({ id: tenantConnections.id }).from(tenantConnections)
+        .where(and(inArray(tenantConnections.id, connectionIds), eq(tenantConnections.enabled, true)))
+      if (found.length !== connectionIds.length) throw createError({ status: 400, message: 'Tenant inconnu ou désactivé' })
+    }
     const [row] = await tx.insert(controlSessions).values({
       name: input.name,
       description: input.description,
       template: input.template,
-      config: { siteIds },
+      config: input.template === 'exchange-shared-mailboxes' ? { connectionIds } : { siteIds },
       dueDate: input.dueDate ? new Date(input.dueDate) : null,
       createdById: admin.id
     }).returning()

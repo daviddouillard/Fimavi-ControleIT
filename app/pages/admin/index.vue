@@ -14,7 +14,7 @@ const totals = computed(() => active.value.reduce((acc, s) => ({
 
 const templateItems = Object.entries(CONTROL_TEMPLATES).map(([value, label]) => ({ value, label }))
 const createOpen = ref(false)
-const form = reactive<CreateSessionInput>({ name: '', template: 'sharepoint-external', siteIds: [] })
+const form = reactive<CreateSessionInput>({ name: '', template: 'sharepoint-external', siteIds: [], connectionIds: [] })
 const creating = ref(false)
 
 // Sites SharePoint actifs (paramètres) : tous pré-cochés à l'ouverture de la fenêtre.
@@ -24,11 +24,20 @@ const activeSites = computed(() => {
   return (settings.value?.sites ?? []).filter(site => site.enabled && enabledTenants.has(site.connectionId))
     .map(site => ({ ...site, tenantName: enabledTenants.get(site.connectionId)! }))
 })
+// Tenants actifs (boîtes partagées) : tous pré-cochés.
+const activeTenants = computed(() => (settings.value?.connections ?? []).filter(c => c.enabled))
 async function openCreate() {
   await refreshSettings()
   form.siteIds = activeSites.value.map(site => site.id)
+  form.connectionIds = activeTenants.value.map(c => c.id)
   createOpen.value = true
 }
+function toggleTenant(connectionId: string, checked: boolean) {
+  const current = form.connectionIds ?? []
+  form.connectionIds = checked ? [...new Set([...current, connectionId])] : current.filter(c => c !== connectionId)
+}
+const isMailboxes = computed(() => form.template === 'exchange-shared-mailboxes')
+const canCreate = computed(() => isMailboxes.value ? !!form.connectionIds?.length : !!form.siteIds?.length)
 function toggleSite(siteId: string, checked: boolean) {
   const current = form.siteIds ?? []
   form.siteIds = checked ? [...new Set([...current, siteId])] : current.filter(s => s !== siteId)
@@ -43,7 +52,7 @@ async function createSession() {
     await navigateTo(`/admin/sessions/${session.id}`)
   } catch (e) {
     const message = (e as { data?: { message?: string } }).data?.message
-    toast.add({ title: 'Création impossible', description: message ?? 'Vérifiez le nom (3 caractères minimum) et les sites.', color: 'error' })
+    toast.add({ title: 'Création impossible', description: message ?? 'Vérifiez le nom (3 caractères minimum) et les sites ou tenants.', color: 'error' })
   } finally {
     creating.value = false
   }
@@ -188,7 +197,7 @@ const kpis = computed(() => [
           <UIcon name="i-lucide-shield-x" class="size-5 text-error" />
           <h2 class="text-lg font-semibold">Accès à retirer ({{ remediations.length }})</h2>
         </div>
-        <p class="text-sm text-muted">Retirez l'accès dans SharePoint, puis cliquez sur « Fait ».</p>
+        <p class="text-sm text-muted">Retirez l'accès dans SharePoint ou Exchange, puis cliquez sur « Fait ».</p>
       </div>
       <div v-if="!remediations.length" class="flex items-center gap-3 rounded-xl border border-dashed border-default p-5 text-muted">
         <UIcon name="i-lucide-party-popper" class="size-6" /> Rien à retirer pour le moment.
@@ -231,7 +240,27 @@ const kpis = computed(() => [
               />
             </div>
           </fieldset>
-          <p class="text-sm text-muted">La recherche des partages externes démarre dès la création.</p>
+          <fieldset v-if="isMailboxes" class="space-y-1">
+            <legend class="mb-1 text-sm font-medium">Tenants à analyser</legend>
+            <p v-if="!activeTenants.length" class="text-sm text-muted">
+              Aucun tenant actif. Déclarez vos tenants dans les <ULink to="/admin/settings">paramètres</ULink>.
+            </p>
+            <div v-else class="space-y-1">
+              <UCheckbox
+                v-for="c in activeTenants"
+                :key="c.id"
+                :model-value="form.connectionIds?.includes(c.id)"
+                :label="c.name"
+                :description="c.tenantId"
+                @update:model-value="(v: boolean | 'indeterminate') => toggleTenant(c.id, v === true)"
+              />
+            </div>
+          </fieldset>
+          <p class="text-sm text-muted">
+            {{ isMailboxes
+              ? 'La lecture des accès aux boîtes partagées (accès total, envoyer en tant que, envoyer de la part de) démarre dès la création.'
+              : 'La recherche des partages externes démarre dès la création.' }}
+          </p>
         </form>
       </template>
       <template #footer>
@@ -239,9 +268,9 @@ const kpis = computed(() => [
           type="submit"
           form="create-session"
           :loading="creating"
-          :disabled="form.template === 'sharepoint-external' && !form.siteIds?.length"
+          :disabled="!canCreate"
         >
-          Créer et rechercher les partages
+          {{ isMailboxes ? 'Créer et lire les accès' : 'Créer et rechercher les partages' }}
         </UButton>
       </template>
     </UModal>

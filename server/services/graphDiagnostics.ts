@@ -26,3 +26,19 @@ export function siteAccessMessage(error: unknown): string {
   }
   return 'Site injoignable'
 }
+
+/** Message d'erreur explicite pour le test Exchange d'un tenant (permission Exchange.ManageAsApp, rôle Lecteur général). */
+export function exchangeAccessMessage(error: unknown): string {
+  if (error instanceof TokenError) {
+    const reason = error.code ? TOKEN_REASONS[error.code] : undefined
+    return `Jeton Exchange refusé par Microsoft${error.code ? ` (${error.code})` : ''} : ${reason ?? 'permission Exchange.ManageAsApp à ajouter et à consentir dans ce tenant'}`
+  }
+  if (error instanceof GraphError) {
+    const code = error.code ? `, ${error.code}` : ''
+    if (error.status === 401 || error.status === 403) {
+      return `Accès refusé par Exchange (${error.status}${code}) : permission Exchange.ManageAsApp non consentie ou rôle « Lecteur général » non attribué à l'application dans ce tenant (patienter jusqu'à 1 h après l'attribution)`
+    }
+    return `Exchange injoignable (${error.status}${code})`
+  }
+  return 'Exchange injoignable'
+}
