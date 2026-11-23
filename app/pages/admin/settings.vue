@@ -152,6 +152,24 @@ async function testGandi() {
   }
 }
 
+// Test de l'API Sage et des groupes Entra Sage (modèle « Accès Sage »).
+const testingSage = ref(false)
+async function testSage() {
+  testingSage.value = true
+  try {
+    const r = await $fetch<{ ok: boolean, accounts?: number, dossiers?: number, message?: string, groups: { name: string, members?: number, message?: string }[] }>('/api/admin/settings/sage/test', { method: 'POST' })
+    const lines = [
+      r.message ?? `${r.accounts} compte(s) Sage dans ${r.dossiers} dossier(s).`,
+      ...r.groups.map(g => g.message ? `${g.name} : ${g.message}` : `${g.name} : ${g.members} membre(s).`)
+    ].join(' ')
+    toast.add(r.ok
+      ? { title: 'Accès Sage OK', description: lines, color: 'success' }
+      : { title: 'Accès Sage incomplet', description: lines, color: 'error', duration: 20000 })
+  } finally {
+    testingSage.value = false
+  }
+}
+
 const sitesOf = (connectionId: string) => (settings.value?.sites ?? []).filter(s => s.connectionId === connectionId)
 </script>
 
@@ -187,6 +205,24 @@ const sitesOf = (connectionId: string) => (settings.value?.sites ?? []).filter(s
         <UBadge v-else color="neutral" variant="subtle" icon="i-lucide-key-round">Jeton non configuré</UBadge>
         <UButton size="sm" variant="outline" icon="i-lucide-globe" :loading="testingGandi" :disabled="!settings.gandiConfigured" @click="testGandi">
           Tester Gandi
+        </UButton>
+      </div>
+    </UCard>
+
+    <UCard>
+      <template #header>
+        <h2 class="font-medium">Sage (comptes par dossier)</h2>
+        <p class="text-sm text-muted">
+          Lecture seule des comptes Sage par personne et par dossier via l'API interne A3SreportingSage (sans les mots de passe Sage),
+          rapprochés des groupes Entra donnant accès à Sage. L'adresse et la clé de l'API se configurent dans Secret Manager
+          (NUXT_SAGE_API_URL, NUXT_SAGE_API_KEY), jamais ici.
+        </p>
+      </template>
+      <div class="flex flex-wrap items-center gap-3">
+        <UBadge v-if="settings.sageConfigured" color="success" variant="subtle" icon="i-lucide-key-round">API configurée</UBadge>
+        <UBadge v-else color="neutral" variant="subtle" icon="i-lucide-key-round">API non configurée</UBadge>
+        <UButton size="sm" variant="outline" icon="i-lucide-database" :loading="testingSage" :disabled="!settings.sageConfigured" @click="testSage">
+          Tester Sage
         </UButton>
       </div>
     </UCard>

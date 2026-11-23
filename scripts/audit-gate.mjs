@@ -4,9 +4,7 @@
 import { execFileSync } from 'node:child_process'
 
 const EXCEPTIONS = {
-  // picomatch ≤ 4.0.7 (ReDoS sur des motifs de fichiers) : outillage de compilation Nuxt uniquement,
-  // absent du serveur déployé, sans version corrigée. Voir docs/audits/2026-11-18-boites-partagees.md.
-  'GHSA-fc5q-39xc-vjpf': '2026-12-31'
+  // Aucune exception en cours (picomatch GHSA-fc5q-39xc-vjpf corrigé, retiré le 2026-11-23).
 }
 const BLOCKING = new Set(['high', 'critical'])
 

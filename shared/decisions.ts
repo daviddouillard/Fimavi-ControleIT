@@ -24,6 +24,10 @@ const WORDINGS: Record<string, Record<'keep' | 'remove', DecisionWording>> = {
   'gandi-domains': {
     keep: { action: 'Renouveler', state: 'À renouveler', description: 'Le service sert toujours : il doit être renouvelé.', placeholder: 'À quoi sert ce domaine, certificat ou hébergement ?' },
     remove: { action: 'Ne plus renouveler', state: 'À ne plus renouveler', description: 'L\'IT désactivera le renouvellement : le service expirera à son échéance.', placeholder: 'Pourquoi n\'est-il plus utile ?' }
+  },
+  'sage-access': {
+    keep: { action: 'Valider l\'accès', state: 'Accès validé', description: 'Cette personne a toujours besoin de ce dossier Sage.', placeholder: 'Pourquoi cet accès est-il nécessaire ?' },
+    remove: { action: 'Retirer l\'accès', state: 'Accès à retirer', description: 'L\'IT retirera l\'accès à ce dossier dans Sage.', placeholder: 'Pourquoi cet accès doit-il être retiré ?' }
   }
 }
 

@@ -86,21 +86,31 @@ jobs:
           # Jeton Gandi (modèle « Noms de domaine ») : ajouté seulement une fois le secret créé (variable GANDI_TOKEN_SECRET).
           GANDI=""
           if [ -n "${{ vars.GANDI_TOKEN_SECRET }}" ]; then GANDI=",NUXT_GANDI_TOKEN=${{ vars.GANDI_TOKEN_SECRET }}:latest"; fi
+          # Clé de l'API Sage (modèle « Accès Sage ») : ajoutée seulement une fois le secret créé (variable SAGE_API_KEY_SECRET).
+          SAGE=""
+          if [ -n "${{ vars.SAGE_API_KEY_SECRET }}" ]; then SAGE=",NUXT_SAGE_API_KEY=${{ vars.SAGE_API_KEY_SECRET }}:latest"; fi
+          # Sortie Internet par le VPC et le Cloud NAT (IP fixe autorisée par fimapi2) : variable VPC_EGRESS_NETWORK (infra/gcp-nat.ps1).
+          NET=""
+          if [ -n "${{ vars.VPC_EGRESS_NETWORK }}" ]; then NET="--network ${{ vars.VPC_EGRESS_NETWORK }} --subnet ${{ vars.VPC_EGRESS_NETWORK }} --vpc-egress all-traffic"; fi
           gcloud run jobs deploy controleit-collect --project "$PROJECT" --region "$REGION" --image "$IMAGE" \
             --service-account "controleit-run@${PROJECT}.iam.gserviceaccount.com" \
-            --set-cloudsql-instances "$INSTANCE" \
+            --set-cloudsql-instances "$INSTANCE" $NET \
             --memory 1Gi --cpu 1 --tasks 1 --max-retries 0 --task-timeout 24h \
-            --set-secrets "NUXT_DATABASE_URL=controleit-database-url:latest,NUXT_OAUTH_MICROSOFT_CLIENT_SECRET=controleit-entra-client-secret:latest${GANDI}" \
-            --set-env-vars "NUXT_OAUTH_MICROSOFT_TENANT=${{ vars.ENTRA_TENANT_ID }},NUXT_OAUTH_MICROSOFT_CLIENT_ID=${{ vars.ENTRA_CLIENT_ID }}"
+            --set-secrets "NUXT_DATABASE_URL=controleit-database-url:latest,NUXT_OAUTH_MICROSOFT_CLIENT_SECRET=controleit-entra-client-secret:latest${GANDI}${SAGE}" \
+            --set-env-vars "NUXT_OAUTH_MICROSOFT_TENANT=${{ vars.ENTRA_TENANT_ID }},NUXT_OAUTH_MICROSOFT_CLIENT_ID=${{ vars.ENTRA_CLIENT_ID }},NUXT_SAGE_API_URL=${{ vars.SAGE_API_URL }}"
 
       - name: Déploiement Cloud Run
         run: |
           GANDI=""
           if [ -n "${{ vars.GANDI_TOKEN_SECRET }}" ]; then GANDI=",NUXT_GANDI_TOKEN=${{ vars.GANDI_TOKEN_SECRET }}:latest"; fi
+          SAGE=""
+          if [ -n "${{ vars.SAGE_API_KEY_SECRET }}" ]; then SAGE=",NUXT_SAGE_API_KEY=${{ vars.SAGE_API_KEY_SECRET }}:latest"; fi
+          NET=""
+          if [ -n "${{ vars.VPC_EGRESS_NETWORK }}" ]; then NET="--network ${{ vars.VPC_EGRESS_NETWORK }} --subnet ${{ vars.VPC_EGRESS_NETWORK }} --vpc-egress all-traffic"; fi
           gcloud run deploy controleit --project "$PROJECT" --region "$REGION" --image "$IMAGE" \
             --service-account "controleit-run@${PROJECT}.iam.gserviceaccount.com" \
-            --add-cloudsql-instances "$INSTANCE" \
+            --add-cloudsql-instances "$INSTANCE" $NET \
             --memory 512Mi --cpu 1 --min-instances 0 --max-instances 3 --no-invoker-iam-check \
             --no-cpu-throttling \
-            --set-secrets "NUXT_APP_SECRET=controleit-app-secret:latest,NUXT_DATABASE_URL=controleit-database-url:latest,NUXT_OAUTH_MICROSOFT_CLIENT_SECRET=controleit-entra-client-secret:latest${GANDI}" \
-            --set-env-vars "NUXT_OAUTH_MICROSOFT_TENANT=${{ vars.ENTRA_TENANT_ID }},NUXT_OAUTH_MICROSOFT_CLIENT_ID=${{ vars.ENTRA_CLIENT_ID }},NUXT_ADMIN_ROLE=${{ vars.ENTRA_ADMIN_ROLE }},NUXT_MAIL_SENDER=${{ vars.MAIL_SENDER }},NUXT_COLLECTION_JOB=projects/${PROJECT}/locations/${REGION}/jobs/controleit-collect,NUXT_OAUTH_MICROSOFT_REDIRECT_URL=https://controleit-${{ vars.GCP_PROJECT_NUMBER }}.${{ vars.GCP_REGION }}.run.app/auth/microsoft"
+            --set-secrets "NUXT_APP_SECRET=controleit-app-secret:latest,NUXT_DATABASE_URL=controleit-database-url:latest,NUXT_OAUTH_MICROSOFT_CLIENT_SECRET=controleit-entra-client-secret:latest${GANDI}${SAGE}" \
+            --set-env-vars "NUXT_OAUTH_MICROSOFT_TENANT=${{ vars.ENTRA_TENANT_ID }},NUXT_OAUTH_MICROSOFT_CLIENT_ID=${{ vars.ENTRA_CLIENT_ID }},NUXT_ADMIN_ROLE=${{ vars.ENTRA_ADMIN_ROLE }},NUXT_MAIL_SENDER=${{ vars.MAIL_SENDER }},NUXT_COLLECTION_JOB=projects/${PROJECT}/locations/${REGION}/jobs/controleit-collect,NUXT_OAUTH_MICROSOFT_REDIRECT_URL=https://controleit-${{ vars.GCP_PROJECT_NUMBER }}.${{ vars.GCP_REGION }}.run.app/auth/microsoft,NUXT_SAGE_API_URL=${{ vars.SAGE_API_URL }}"

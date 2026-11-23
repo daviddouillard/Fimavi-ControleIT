@@ -44,6 +44,12 @@ export default defineNuxtConfig({
     collectionRunId: '',
     // NUXT_GANDI_TOKEN : jeton d'accès personnel Gandi (lecture des noms de domaine de l'organisation).
     gandiToken: '',
+    // NUXT_SAGE_API_URL : adresse de base de l'API A3SreportingSage (HTTPS), ex. https://fimapi2.fimavi.com/A3SreportingSage/
+    sageApiUrl: '',
+    // NUXT_SAGE_API_KEY : clé X-API-KEY de cette API (Secret Manager en production).
+    sageApiKey: '',
+    // NUXT_SAGE_GROUPS : groupes Entra (tenant principal) donnant accès aux fonctions Sage, séparés par des virgules.
+    sageGroups: 'COMPTA_USER,MDP_USER,GESTCOM_USER',
     public: {}
   },
 

@@ -24,6 +24,7 @@ export default defineEventHandler(async (event) => {
     homeTenantId: homeTenant(),
     // Jamais le jeton lui-même : seulement s'il est configuré.
     gandiConfigured: !!config.gandiToken,
+    sageConfigured: !!config.sageApiUrl && !!config.sageApiKey,
     connections: settings.connections.map(c => ({ ...c, consentUrl: consentUrl(c.tenantId) }))
   }
 })

@@ -4,7 +4,8 @@ import { FIELD_NAME, FIELD_PENDING, textToDoc, type RichNode } from './richText'
 
 const SUBJECTS: Record<string, string> = {
   'exchange-shared-mailboxes': 'accès aux boîtes partagées',
-  'gandi-domains': 'services Gandi à renouveler ?'
+  'gandi-domains': 'services Gandi à renouveler ?',
+  'sage-access': 'accès Sage'
 }
 
 export const defaultEmailSubject = (sessionName: string, template?: string) =>
@@ -57,6 +58,22 @@ export const DEFAULT_DOMAIN_EMAIL_MESSAGE = [
   ''
 ].join('\n')
 
+/** Message par défaut du modèle « Accès Sage ». */
+export const DEFAULT_SAGE_EMAIL_MESSAGE = [
+  `Bonjour ${FIELD_NAME},`,
+  '',
+  FIELD_PENDING,
+  '',
+  'Je vous ai confié des accès Sage à vérifier : des personnes qui ont un compte dans un dossier Sage (comptabilité, moyens de paiement, gestion commerciale) d\'une société du groupe.',
+  '',
+  'Pourquoi ? Ces accès restent en place après un changement de poste ou un départ : une personne peut continuer à consulter ou modifier la comptabilité ou les ventes d\'une société sans en avoir besoin. Faire le point régulièrement protège nos données financières. Vous êtes le mieux placé pour savoir si ces accès sont toujours justifiés.',
+  '',
+  'Ce que je vous demande : pour chaque ligne, indiquez si l\'accès doit être conservé ou retiré, ou signalez qu\'il ne vous concerne pas. Ajoutez un court commentaire à chaque réponse. Si vous demandez le retrait, je m\'occupe de retirer l\'accès dans Sage.',
+  '',
+  'Merci par avance de votre retour.',
+  ''
+].join('\n')
+
 /** Signature intégrée au message par défaut (modifiable dans le corps du message avant chaque envoi). */
 const DEFAULT_SIGNATURE: RichNode[] = [
   { type: 'paragraph', content: [{ type: 'text', text: 'Cordialement,' }] },
@@ -72,7 +89,9 @@ const BOLD_LEADS = ['Pourquoi ?', 'Ce que je vous demande :']
 
 /** Corps par défaut de l'email : message du modèle puis signature, dans un seul document de l'éditeur. */
 export const defaultEmailDoc = (template?: string): RichNode => {
-  const text = template === 'exchange-shared-mailboxes' ? DEFAULT_MAILBOX_EMAIL_MESSAGE : template === 'gandi-domains' ? DEFAULT_DOMAIN_EMAIL_MESSAGE : DEFAULT_EMAIL_MESSAGE
+  const text = template === 'exchange-shared-mailboxes'
+    ? DEFAULT_MAILBOX_EMAIL_MESSAGE
+    : template === 'gandi-domains' ? DEFAULT_DOMAIN_EMAIL_MESSAGE : template === 'sage-access' ? DEFAULT_SAGE_EMAIL_MESSAGE : DEFAULT_EMAIL_MESSAGE
   const message = textToDoc(text).content ?? []
   const content = message.map((paragraph) => {
     const text = paragraph.content?.[0]?.text ?? ''

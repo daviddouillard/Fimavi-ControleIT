@@ -27,6 +27,8 @@ const session = computed(() => data.value?.session)
 const isMailboxes = computed(() => session.value?.template === 'exchange-shared-mailboxes')
 /** Modèle noms de domaine (Gandi) : l'extension tient lieu de site, l'échéance de bénéficiaire ; pas d'auteur. */
 const isDomains = computed(() => session.value?.template === 'gandi-domains')
+/** Modèle accès Sage : le dossier tient lieu de site et de ressource, la personne de bénéficiaire ; N+1 suggéré à la place de l'auteur. */
+const isSage = computed(() => session.value?.template === 'sage-access')
 const wording = (decision: 'keep' | 'remove') => decisionWording(decision, session.value?.template)
 const editable = computed(() => session.value?.status !== 'closed')
 /** Ligne (ré)assignable : sans réponse, ou signalée comme mal attribuée, et non clôturée. */
@@ -64,8 +66,8 @@ const typeFilter = ref<string[]>([])
 /** Valeurs distinctes d'un champ, triées, pour les listes de filtres. */
 const distinct = (pick: (item: Item) => string | null | undefined) =>
   [...new Set((data.value?.items ?? []).map(pick).filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b, 'fr'))
-const placeOf = (item: Item) => item.data.site ?? item.data.tenant ?? item.data.gandiKind ?? (item.data.tld ? `Domaine .${item.data.tld}` : undefined)
-const accessOf = (item: Item) => item.data.access ?? item.data.right ?? (item.data.autorenew ? `Renouvellement auto ${item.data.autorenew.toLowerCase()}` : undefined)
+const placeOf = (item: Item) => item.data.sageDossier ?? item.data.site ?? item.data.tenant ?? item.data.gandiKind ?? (item.data.tld ? `Domaine .${item.data.tld}` : undefined)
+const accessOf = (item: Item) => item.data.anomaly ?? item.data.entraGroups ?? item.data.access ?? item.data.right ?? (item.data.autorenew ? `Renouvellement auto ${item.data.autorenew.toLowerCase()}` : undefined)
 const siteOptions = computed(() => distinct(placeOf))
 const assigneeOptions = computed(() => [NO_ASSIGNEE, ...distinct(i => i.assigneeName)])
 const accessOptions = computed(() => distinct(accessOf))
@@ -84,19 +86,19 @@ const matchesState = (item: Item) => {
   }
 }
 const inList = (selected: string[], value: string | null | undefined) => !selected.length || selected.includes(value ?? '')
-const searchText = (item: Item) => [item.label, item.data.resource, item.data.beneficiary, item.data.site, item.data.mailbox, item.data.mailboxName, item.data.trustee, item.data.trusteeName, item.data.right, item.data.domain, item.data.domainOwner, item.data.gandiKind, item.data.product, item.data.altnames, item.data.hostingDomain, item.data.sharedBy, item.data.suggestedValidatorName, item.assigneeName, item.comment]
+const searchText = (item: Item) => [item.label, item.data.resource, item.data.beneficiary, item.data.site, item.data.mailbox, item.data.mailboxName, item.data.trustee, item.data.trusteeName, item.data.right, item.data.domain, item.data.domainOwner, item.data.gandiKind, item.data.product, item.data.altnames, item.data.hostingDomain, item.data.sageDossier, item.data.sageLogin, item.data.personName, item.data.adAccount, item.data.entraGroups, item.data.anomaly, item.data.sharedBy, item.data.suggestedValidatorName, item.assigneeName, item.comment]
   .filter(Boolean).join(' ').toLocaleLowerCase('fr')
 
 // Tri par colonne (clic sur l'en-tête : croissant, puis décroissant).
 type SortKey = 'rowNumber' | 'site' | 'resource' | 'beneficiary' | 'author' | 'assignee' | 'state' | 'remediation'
 const sort = ref<{ key: SortKey, desc: boolean }>({ key: 'rowNumber', desc: false })
-const resourceName = (item: Item) => item.data.domain ? item.data.domain : item.data.mailbox ? item.data.mailboxName || item.data.mailbox : (item.data.resource ?? item.label).split(' / ').at(-1) ?? ''
+const resourceName = (item: Item) => item.data.sageDossier ? item.data.sageDossier : item.data.domain ? item.data.domain : item.data.mailbox ? item.data.mailboxName || item.data.mailbox : (item.data.resource ?? item.label).split(' / ').at(-1) ?? ''
 const sortValue: Record<SortKey, (item: Item) => string | number> = {
   rowNumber: i => i.rowNumber,
   site: i => placeOf(i) ?? '',
   resource: resourceName,
-  beneficiary: i => i.data.beneficiary ?? i.data.trusteeName ?? i.data.trustee ?? i.data.domainExpiresAt ?? '',
-  author: i => i.data.sharedBy ?? '￿',
+  beneficiary: i => i.data.personName ?? i.data.beneficiary ?? i.data.trusteeName ?? i.data.trustee ?? i.data.domainExpiresAt ?? '',
+  author: i => i.data.sharedBy ?? i.data.suggestedValidatorName ?? '￿',
   assignee: i => i.assigneeName ?? '',
   state: i => itemState(i).label,
   remediation: i => i.remediationStatus ?? ''
@@ -179,20 +181,20 @@ const columns: TableColumn<Item>[] = [
     })
   },
   { accessorKey: 'rowNumber', header: sortHeader('#', 'rowNumber') },
-  { id: 'site', header: () => sortHeader(isMailboxes.value ? 'Tenant' : isDomains.value ? 'Type' : 'Site', 'site')(), cell: ({ row }) => h('span', { class: 'whitespace-nowrap font-medium' }, placeOf(row.original) ?? '—') },
+  { id: 'site', header: () => sortHeader(isMailboxes.value ? 'Tenant' : isDomains.value ? 'Type' : isSage.value ? 'Dossier Sage' : 'Site', 'site')(), cell: ({ row }) => h('span', { class: 'whitespace-nowrap font-medium' }, placeOf(row.original) ?? '—') },
   {
     id: 'resource',
-    header: () => sortHeader(isMailboxes.value ? 'Boîte partagée' : isDomains.value ? 'Nom' : 'Ressource', 'resource')(),
+    header: () => sortHeader(isMailboxes.value ? 'Boîte partagée' : isDomains.value ? 'Nom' : isSage.value ? 'Dossier et compte' : 'Ressource', 'resource')(),
     cell: ({ row }) => h('div', { class: 'min-w-64 max-w-md 2xl:max-w-xl' }, [h(ShareResource, { data: row.original.data, label: row.original.label })])
   },
   {
     id: 'beneficiary',
-    header: () => sortHeader(isMailboxes.value ? 'Titulaire et droit' : isDomains.value ? 'Échéance' : 'Bénéficiaire', 'beneficiary')(),
+    header: () => sortHeader(isMailboxes.value ? 'Titulaire et droit' : isDomains.value ? 'Échéance' : isSage.value ? 'Personne et groupes' : 'Bénéficiaire', 'beneficiary')(),
     cell: ({ row }) => h('div', { class: 'min-w-56 max-w-xs 2xl:max-w-sm' }, [h(ShareBeneficiary, { data: row.original.data })])
   },
   {
     id: 'author',
-    header: sortHeader('Partagé par', 'author'),
+    header: () => sortHeader(isSage.value ? 'N+1 suggéré' : 'Partagé par', 'author')(),
     cell: ({ row }) => h('div', { class: 'min-w-44 max-w-xs' }, [h(ShareAuthor, {
       'data': row.original.data,
       'assignable': editable.value && isPending(row.original),
@@ -479,7 +481,7 @@ function sendEmails() {
     <UCard v-if="run">
       <template #header>
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <h2 class="font-medium">{{ isMailboxes ? 'Lecture des accès aux boîtes partagées' : isDomains ? 'Lecture des services Gandi' : 'Collecte des partages' }}</h2>
+          <h2 class="font-medium">{{ isMailboxes ? 'Lecture des accès aux boîtes partagées' : isDomains ? 'Lecture des services Gandi' : isSage ? 'Lecture des accès Sage' : 'Collecte des partages' }}</h2>
           <UButton
             v-if="session.status === 'draft' && run.status !== 'running'"
             icon="i-lucide-refresh-cw"
@@ -494,10 +496,10 @@ function sendEmails() {
       <div class="space-y-2 text-sm">
         <p v-if="run.status === 'running'" class="flex flex-wrap items-center gap-2">
           <UIcon name="i-lucide-loader-circle" class="animate-spin" />
-          En cours : {{ isMailboxes ? 'tenant' : isDomains ? 'source' : 'site' }} {{ Math.min((progress.sitesDone ?? 0) + 1, progress.sitesTotal ?? 1) }}/{{ progress.sitesTotal ?? '?' }}
+          En cours : {{ isMailboxes ? 'tenant' : isDomains || isSage ? 'étape' : 'site' }} {{ Math.min((progress.sitesDone ?? 0) + 1, progress.sitesTotal ?? 1) }}/{{ progress.sitesTotal ?? '?' }}
           <span v-if="progress.site" class="text-muted break-all">({{ progress.site }})</span>
           <template v-if="isMailboxes">· boîtes partagées lues {{ progress.mailboxesDone ?? 0 }}/{{ progress.mailboxesTotal ?? '?' }}</template>
-          <template v-else-if="!isDomains">· {{ progress.itemsScanned ?? 0 }} éléments parcourus</template>
+          <template v-else-if="!isDomains && !isSage">· {{ progress.itemsScanned ?? 0 }} éléments parcourus</template>
           <template v-if="progress.permissionsTotal">· partages analysés {{ progress.permissionsChecked ?? 0 }}/{{ progress.permissionsTotal }}</template>
           <template v-if="progress.authors === 'running'">· recherche des auteurs dans le journal d'audit Microsoft 365…</template>
           · {{ progress.added ?? 0 }} ligne(s) ajoutée(s)<template v-if="progress.duplicates">, {{ progress.duplicates }} déjà présente(s)</template>

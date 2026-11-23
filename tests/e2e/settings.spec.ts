@@ -98,3 +98,20 @@ test('modèle « Services Gandi » : jeton Gandi signalé non configuré, sessio
   await expect(dialog.getByRole('checkbox')).toHaveCount(0)
   await expect(dialog.getByRole('button', { name: 'Créer et lire les services Gandi' })).toBeEnabled()
 })
+
+test('modèle « Accès Sage » : API signalée non configurée, session sans site ni tenant', async ({ page, baseURL }) => {
+  await loginAs(page.context(), baseURL!, USERS.admin)
+  await page.goto('/admin/settings')
+  await expect(page.getByText('API non configurée')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Tester Sage' })).toBeDisabled()
+
+  await page.goto('/admin')
+  await page.waitForLoadState('networkidle')
+  await page.getByRole('button', { name: 'Nouvelle session' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByRole('combobox').click()
+  await page.getByRole('option', { name: 'Accès Sage' }).click()
+  await dialog.getByRole('textbox').first().fill('Accès Sage T4')
+  await expect(dialog.getByRole('checkbox')).toHaveCount(0)
+  await expect(dialog.getByRole('button', { name: 'Créer et lire les accès Sage' })).toBeEnabled()
+})

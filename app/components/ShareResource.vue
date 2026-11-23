@@ -10,13 +10,18 @@ const GANDI_ICONS: Record<string, string> = { 'Certificat SSL': 'i-lucide-shield
 
 const mailbox = computed(() => !!props.data.mailbox)
 const domain = computed(() => !!props.data.domain)
-const path = computed(() => domain.value ? props.data.domain! : mailbox.value ? props.data.mailboxName || props.data.mailbox! : props.data.resource ?? props.label)
-const parts = computed(() => path.value.split(' / '))
+const sage = computed(() => !!props.data.sageDossier)
+const path = computed(() => sage.value ? props.data.sageDossier! : domain.value ? props.data.domain! : mailbox.value ? props.data.mailboxName || props.data.mailbox! : props.data.resource ?? props.label)
+const parts = computed(() => sage.value ? [path.value] : path.value.split(' / '))
 const name = computed(() => parts.value.at(-1) ?? path.value)
-const parent = computed(() => domain.value ? [props.data.product, props.data.domainOwner ?? props.data.hostingDomain].filter(Boolean).join(' · ') : mailbox.value ? [props.data.mailbox, props.data.tenant].filter(Boolean).join(' · ') : parts.value.slice(0, -1).join(' / '))
-const icon = computed(() => domain.value ? GANDI_ICONS[props.data.gandiKind ?? ''] ?? 'i-lucide-globe' : mailbox.value ? 'i-lucide-inbox' : ICONS[props.data.resourceType ?? ''] ?? 'i-lucide-file')
-const link = computed(() => mailbox.value || domain.value ? null : sharepointLink(props.data))
-const kind = computed(() => domain.value ? props.data.gandiKind ?? 'Nom de domaine' : mailbox.value ? 'Boîte partagée' : props.data.resourceType)
+const parent = computed(() => {
+  if (sage.value) return props.data.sageLogin ? `Compte ${props.data.sageLogin}` : ''
+  if (domain.value) return [props.data.product, props.data.domainOwner ?? props.data.hostingDomain].filter(Boolean).join(' · ')
+  return mailbox.value ? [props.data.mailbox, props.data.tenant].filter(Boolean).join(' · ') : parts.value.slice(0, -1).join(' / ')
+})
+const icon = computed(() => sage.value ? 'i-lucide-database' : domain.value ? GANDI_ICONS[props.data.gandiKind ?? ''] ?? 'i-lucide-globe' : mailbox.value ? 'i-lucide-inbox' : ICONS[props.data.resourceType ?? ''] ?? 'i-lucide-file')
+const link = computed(() => mailbox.value || domain.value || sage.value ? null : sharepointLink(props.data))
+const kind = computed(() => sage.value ? 'Dossier Sage' : domain.value ? props.data.gandiKind ?? 'Nom de domaine' : mailbox.value ? 'Boîte partagée' : props.data.resourceType)
 </script>
 
 <template>

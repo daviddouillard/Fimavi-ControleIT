@@ -9,8 +9,8 @@ const probable = computed(() => props.data.sharedByCertain === 'no')
 </script>
 
 <template>
-  <div v-if="data.sharedBy" class="space-y-1 text-sm">
-    <p class="flex items-center gap-1.5 break-all">
+  <div v-if="data.sharedBy || (showSuggestion && data.suggestedValidatorName)" class="space-y-1 text-sm">
+    <p v-if="data.sharedBy" class="flex items-center gap-1.5 break-all">
       <UIcon name="i-lucide-user-pen" class="size-4 shrink-0 text-muted" />
       <button
         v-if="assignable"
@@ -23,7 +23,7 @@ const probable = computed(() => props.data.sharedByCertain === 'no')
       </button>
       <span v-else class="font-medium">{{ data.sharedBy }}</span>
     </p>
-    <p class="flex flex-wrap items-center gap-1 text-xs text-muted">
+    <p v-if="data.sharedBy" class="flex flex-wrap items-center gap-1 text-xs text-muted">
       <span v-if="data.sharedAt">le {{ formatDateTime(data.sharedAt) }}</span>
       <UBadge
         v-if="probable"

@@ -153,7 +153,7 @@ export function indexByObject(events: SharingEvent[]): Map<string, SharingEvent[
 
 const managerSchema = z.object({ id: z.string(), displayName: z.string().nullish() })
 
-/** Responsable (N+1) d'un compte dans l'annuaire Entra (User.Read.All) ; null s'il n'en a pas. */
+/** Responsable (N+1) d'un compte (UPN ou ID Entra) dans l'annuaire Entra (User.Read.All) ; null s'il n'en a pas. */
 export async function managerOf(graph: GraphClient, userPrincipalName: string): Promise<{ entraId: string, displayName: string } | null> {
   try {
     const m = managerSchema.parse(await graph.get(`users/${encodeURIComponent(userPrincipalName)}/manager?$select=id,displayName`))
