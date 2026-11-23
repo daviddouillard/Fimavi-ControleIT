@@ -38,7 +38,7 @@
 - **Paramètres et textes** : carte « Sage » dans les paramètres, vocabulaire « Valider l'accès » / « Retirer l'accès », email par défaut, écrans admin et valideur.
 - **Déploiement** :
   - secret `NUXT_SAGE_API_KEY` posé par le pipeline si la variable `SAGE_API_KEY_SECRET` existe ;
-  - sortie par VPC et Cloud NAT si la variable `VPC_EGRESS_NETWORK` existe (`infra/gcp-nat.ps1`).
+  - sortie par VPC et Cloud NAT si la variable `VPC_EGRESS_NETWORK` existe (`infra/gcp-nat.ps1` : réseau `controleit-vpc`, IP fixe 34.155.236.109).
 - **Nouvelle permission Graph** : `GroupMember.Read.All` (application), à accorder avec le consentement administrateur.
 
 ## Revue de sécurité

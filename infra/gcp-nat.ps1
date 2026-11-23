@@ -1,8 +1,8 @@
 ﻿# Sortie Internet à adresse IP fixe pour ControleIT (idempotent, à exécuter par un Owner du projet).
 #
 # L'API interne fimapi2 (modèle « Accès Sage ») filtre les adresses IP. Le service et le Job de collecte sortent
-# par le réseau VPC « default » (Direct VPC egress, posé par le pipeline quand la variable GitHub
-# VPC_EGRESS_NETWORK vaut « default ») puis par un Cloud NAT à IP statique réservée.
+# par le réseau VPC « controleit-vpc », créé ici (Direct VPC egress, posé par le pipeline quand la variable GitHub
+# VPC_EGRESS_NETWORK vaut « controleit-vpc ») puis par un Cloud NAT à IP statique réservée.
 # Cette IP doit ensuite être autorisée côté Fimavi sur fimapi2.
 #
 # Le script donne aussi au compte controleit-run l'accès au secret de la clé de l'API Sage.
@@ -10,7 +10,8 @@ $ErrorActionPreference = 'Stop'
 
 $Project = 'fimavi-controleit'
 $Region  = 'europe-west9'
-$Network = 'default'
+$Network = 'controleit-vpc'          # réseau et sous-réseau du même nom
+$SubnetRange = '10.10.0.0/24'
 $Ip      = 'controleit-nat-ip'
 $Router  = 'controleit-router'
 $Nat     = 'controleit-nat'
@@ -30,10 +31,16 @@ Write-Host "`n== API Compute Engine ==" -ForegroundColor Cyan
 gcloud services enable compute.googleapis.com --project $Project
 Check 'gcloud services enable compute'
 
-Write-Host "`n== Réseau $Network ==" -ForegroundColor Cyan
+Write-Host "`n== Réseau $Network et sous-réseau $Network ($Region) ==" -ForegroundColor Cyan
 if (-not (Test-Exists { gcloud compute networks describe $Network --project $Project --format='value(name)' })) {
-  throw "Réseau VPC '$Network' absent : le créer (mode automatique) avant de relancer ce script."
-}
+  gcloud compute networks create $Network --subnet-mode custom --project $Project
+  Check 'gcloud compute networks create'
+} else { Write-Host "Réseau $Network : déjà présent" }
+# Direct VPC egress : un /26 au moins ; aucune règle de pare-feu entrante (rien n'écoute dans ce réseau).
+if (-not (Test-Exists { gcloud compute networks subnets describe $Network --region $Region --project $Project --format='value(name)' })) {
+  gcloud compute networks subnets create $Network --network $Network --region $Region --range $SubnetRange --project $Project
+  Check 'gcloud compute networks subnets create'
+} else { Write-Host "Sous-réseau $Network : déjà présent" }
 
 Write-Host "`n== IP statique $Ip ==" -ForegroundColor Cyan
 if (-not (Test-Exists { gcloud compute addresses describe $Ip --region $Region --project $Project --format='value(name)' })) {
@@ -64,4 +71,4 @@ $address = gcloud compute addresses describe $Ip --region $Region --project $Pro
 Write-Host "`nIP de sortie de ControleIT : $address" -ForegroundColor Green
 Write-Host 'À faire ensuite :'
 Write-Host "  1. Faire autoriser cette IP sur fimapi2 (filtrage IP côté Fimavi)."
-Write-Host '  2. Variables GitHub : VPC_EGRESS_NETWORK=default, SAGE_API_URL, SAGE_API_KEY_SECRET=controleit-sage-api-key.'
+Write-Host '  2. Variables GitHub : VPC_EGRESS_NETWORK=controleit-vpc, SAGE_API_URL, SAGE_API_KEY_SECRET=controleit-sage-api-key.'
