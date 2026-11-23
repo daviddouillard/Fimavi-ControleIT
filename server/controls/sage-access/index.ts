@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { users } from '../../db/schema'
 import { GraphError, type GraphClient } from '../../utils/graph'
 import { sageAccessMessage, type SageClient, type SageLogin } from '../../utils/sageApi'
+import { sageAccountType } from '../../../shared/sageAccounts'
 import { managerOf } from '../sharepoint-external/authors'
 import { CollectionStopped, type CollectionContext, type ControlLine, type ControlModule } from '../types'
 
@@ -69,6 +70,7 @@ export function sageLine(login: SageLogin, person: SagePerson): ControlLine {
   const data: Record<string, string> = { sageDossier: dossier, personName: name }
   if (login.site != null && String(login.site).trim()) data.sageSite = String(login.site).trim()
   if (sageLogin) data.sageLogin = sageLogin
+  data.sageAccountType = sageAccountType(sageLogin).label
   if (adAccount) data.adAccount = adAccount
   if (person.user?.userPrincipalName) data.personUpn = person.user.userPrincipalName
   if (person.groups) {
@@ -86,10 +88,13 @@ export function sageLine(login: SageLogin, person: SagePerson): ControlLine {
   }
 }
 
-/** Écarts d'abord, puis par dossier et par personne. */
-function byAnomalyThenDossier(a: ControlLine, b: ControlLine): number {
-  return Number(!a.data.anomaly) - Number(!b.data.anomaly)
-    || a.data.sageDossier!.localeCompare(b.data.sageDossier!, 'fr')
+/** Rang dans une société : écarts d'abord, puis comptes à privilèges, puis comptes classiques. */
+const rank = (line: ControlLine) => line.data.anomaly ? 0 : sageAccountType(line.data.sageLogin).privileged ? 1 : 2
+
+/** Par société (dossier Sage), puis écarts, comptes à privilèges et autres, puis par personne. */
+export function bySociety(a: ControlLine, b: ControlLine): number {
+  return a.data.sageDossier!.localeCompare(b.data.sageDossier!, 'fr')
+    || rank(a) - rank(b)
     || a.data.personName!.localeCompare(b.data.personName!, 'fr')
 }
 
@@ -191,7 +196,7 @@ export function sageAccessModule(deps: SageAccessDeps): ControlModule {
         }
         return sageLine(login, person)
       })
-      lines.sort(byAnomalyThenDossier)
+      lines.sort(bySociety)
       await ctx.addLines(lines)
       await ctx.progress({ sitesDone: sitesTotal, sitesTotal, accountsTotal: lines.length })
     }

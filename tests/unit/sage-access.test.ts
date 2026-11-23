@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { indexDirectory, NO_GROUP_ANOMALY, parseSageGroups, sageLine } from '../../server/controls/sage-access'
+import { bySociety, indexDirectory, NO_GROUP_ANOMALY, parseSageGroups, sageLine } from '../../server/controls/sage-access'
+import { sageAccountType, sageLoginText } from '../../shared/sageAccounts'
 import { SAGE_ACCESS_PATH, SageApiError, sageAccessMessage, sageBaseUrl, sageClient } from '../../server/utils/sageApi'
 import { decisionWording } from '../../shared/decisions'
 import { defaultEmailDoc, defaultEmailSubject } from '../../shared/emails'
@@ -75,6 +76,7 @@ describe('lignes « Accès Sage »', () => {
         sageDossier: 'DOMOS',
         sageSite: '1016',
         sageLogin: 'JDUPONT',
+        sageAccountType: 'Compte classique',
         adAccount: 'jean.dupont',
         personName: 'Jean Dupont',
         personUpn: 'jean.dupont@fimavi.test',
@@ -105,6 +107,22 @@ describe('lignes « Accès Sage »', () => {
     expect(find('marie.martin')?.id).toBe('b')
     expect(find('inconnu')).toBeUndefined()
     expect(find('')).toBeUndefined()
+  })
+
+  it('type de compte : administrateur et ComptaAdm à privilèges, les autres classiques', () => {
+    expect(sageAccountType('<Administrateur>')).toEqual({ label: 'Compte administrateur', privileged: true })
+    expect(sageAccountType(' comptaadm ')).toEqual({ label: 'Compte ComptaAdm', privileged: true })
+    for (const login of ['Interne', 'Externe', 'JDUPONT', '', null]) expect(sageAccountType(login)).toEqual({ label: 'Compte classique', privileged: false })
+    expect(sageLoginText('<Administrateur>')).toBe('Administrateur')
+    expect(sageLoginText('ComptaAdm')).toBe('ComptaAdm')
+  })
+
+  it('tri par société, puis écarts, comptes à privilèges et comptes classiques', () => {
+    const l = (dossier: string, login: string, groups: string[] = ['COMPTA_USER']) => sageLine({ PR_Nom: login, id_ad: login.toLowerCase(), IntituleDossier: dossier }, { groups })
+    const lines = [l('DOMOS', 'Interne'), l('BEES', 'Interne'), l('DOMOS', 'ComptaAdm'), l('DOMOS', 'Externe', []), l('BEES', '<Administrateur>')]
+    expect(lines.sort(bySociety).map(x => `${x.data.sageDossier}/${x.data.sageLogin}`)).toEqual([
+      'BEES/<Administrateur>', 'BEES/Interne', 'DOMOS/Externe', 'DOMOS/ComptaAdm', 'DOMOS/Interne'
+    ])
   })
 
   it('lit la liste des groupes configurés', () => {

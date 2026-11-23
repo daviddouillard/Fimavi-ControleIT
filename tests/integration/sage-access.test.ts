@@ -62,7 +62,7 @@ describe('modèle « Accès Sage »', () => {
     expect(createSessionSchema.safeParse({ name: 'Sage T4', template: 'sage-access' }).success).toBe(true)
   })
 
-  it('une ligne par personne et par dossier, écarts d\'abord, N+1 suggéré', async () => {
+  it('une ligne par personne et par dossier, triées par société puis écarts, N+1 suggéré', async () => {
     const s = await sageSession()
     const run = await startCollection(db, s.admin, s.session.id)
     await runCollection(db, run.id, sageAccessModule({
@@ -73,12 +73,12 @@ describe('modèle « Accès Sage »', () => {
     }))
     const lines = await db.select().from(checkItems).where(eq(checkItems.sessionId, s.session.id)).orderBy(checkItems.rowNumber)
     expect(lines.map(l => [l.data.personName, l.data.sageDossier, l.data.entraGroups, l.data.anomaly ?? null])).toEqual([
-      ['ancien.salarie', 'DOMOS', 'Aucun', NO_GROUP_ANOMALY],
       ['Jean Dupont', 'BEES', 'COMPTA_USER', null],
+      ['ancien.salarie', 'DOMOS', 'Aucun', NO_GROUP_ANOMALY],
       ['Jean Dupont', 'DOMOS', 'COMPTA_USER', null]
     ])
-    expect(lines[1]!.data.suggestedValidatorId).toBe(s.validator.id)
-    expect(lines[0]!.data.suggestedValidatorId).toBeUndefined()
+    expect(lines[0]!.data.suggestedValidatorId).toBe(s.validator.id)
+    expect(lines[1]!.data.suggestedValidatorId).toBeUndefined()
     const [done] = await db.select().from(collectionRuns).where(eq(collectionRuns.id, run.id))
     expect(done!.status).toBe('succeeded')
     expect(done!.progress).toMatchObject({ duplicates: 1 })

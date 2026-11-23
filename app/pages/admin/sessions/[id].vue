@@ -7,6 +7,7 @@ import { defaultEmailDoc, defaultEmailSubject } from '#shared/emails'
 import { richPlainText, type RichNode } from '#shared/richText'
 import { notifySchema } from '#shared/schemas/checks'
 import { decisionWording } from '#shared/decisions'
+import { sageAccountType } from '#shared/sageAccounts'
 import type { DirectoryUser } from '~/composables/useDirectorySearch'
 
 const UCheckbox = resolveComponent('UCheckbox')
@@ -71,7 +72,8 @@ const accessOf = (item: Item) => item.data.anomaly ?? item.data.entraGroups ?? i
 const siteOptions = computed(() => distinct(placeOf))
 const assigneeOptions = computed(() => [NO_ASSIGNEE, ...distinct(i => i.assigneeName)])
 const accessOptions = computed(() => distinct(accessOf))
-const typeOptions = computed(() => distinct(i => i.data.resourceType))
+const typeOf = (item: Item) => item.data.resourceType ?? (item.data.sageDossier ? sageAccountType(item.data.sageLogin).label : undefined)
+const typeOptions = computed(() => distinct(typeOf))
 
 const matchesState = (item: Item) => {
   switch (filter.value) {
@@ -86,7 +88,7 @@ const matchesState = (item: Item) => {
   }
 }
 const inList = (selected: string[], value: string | null | undefined) => !selected.length || selected.includes(value ?? '')
-const searchText = (item: Item) => [item.label, item.data.resource, item.data.beneficiary, item.data.site, item.data.mailbox, item.data.mailboxName, item.data.trustee, item.data.trusteeName, item.data.right, item.data.domain, item.data.domainOwner, item.data.gandiKind, item.data.product, item.data.altnames, item.data.hostingDomain, item.data.sageDossier, item.data.sageLogin, item.data.personName, item.data.adAccount, item.data.entraGroups, item.data.anomaly, item.data.sharedBy, item.data.suggestedValidatorName, item.assigneeName, item.comment]
+const searchText = (item: Item) => [item.label, item.data.resource, item.data.beneficiary, item.data.site, item.data.mailbox, item.data.mailboxName, item.data.trustee, item.data.trusteeName, item.data.right, item.data.domain, item.data.domainOwner, item.data.gandiKind, item.data.product, item.data.altnames, item.data.hostingDomain, item.data.sageDossier, item.data.sageLogin, item.data.sageAccountType, item.data.personName, item.data.adAccount, item.data.entraGroups, item.data.anomaly, item.data.sharedBy, item.data.suggestedValidatorName, item.assigneeName, item.comment]
   .filter(Boolean).join(' ').toLocaleLowerCase('fr')
 
 // Tri par colonne (clic sur l'en-tête : croissant, puis décroissant).
@@ -114,7 +116,7 @@ const visibleItems = computed(() => {
     && inList(siteFilter.value, placeOf(item))
     && inList(assigneeFilter.value, item.assigneeName ?? NO_ASSIGNEE)
     && inList(accessFilter.value, accessOf(item))
-    && inList(typeFilter.value, item.data.resourceType)
+    && inList(typeFilter.value, typeOf(item))
     && (!term || searchText(item).includes(term)))
   const value = sortValue[sort.value.key]
   const direction = sort.value.desc ? -1 : 1
@@ -535,10 +537,10 @@ function sendEmails() {
             class="w-full sm:w-80"
           />
           <USelect v-model="filter" :items="[...filters]" icon="i-lucide-list-filter" aria-label="Filtrer par état" class="w-56" />
-          <USelectMenu v-model="siteFilter" :items="siteOptions" multiple icon="i-lucide-globe" placeholder="Tous les sites" aria-label="Filtrer par site" class="w-48" />
+          <USelectMenu v-model="siteFilter" :items="siteOptions" multiple icon="i-lucide-globe" :placeholder="isSage ? 'Toutes les sociétés' : 'Tous les sites'" aria-label="Filtrer par site" class="w-48" />
           <USelectMenu v-model="assigneeFilter" :items="assigneeOptions" multiple icon="i-lucide-user-round" placeholder="Tous les valideurs" aria-label="Filtrer par valideur" class="w-56" />
-          <USelectMenu v-model="accessFilter" :items="accessOptions" multiple icon="i-lucide-link" placeholder="Tous les accès" aria-label="Filtrer par type d'accès" class="w-56" />
-          <USelectMenu v-model="typeFilter" :items="typeOptions" multiple icon="i-lucide-folder" placeholder="Tous les types" aria-label="Filtrer par type de ressource" class="w-44" />
+          <USelectMenu v-model="accessFilter" :items="accessOptions" multiple icon="i-lucide-link" :placeholder="isSage ? 'Tous les groupes' : 'Tous les accès'" aria-label="Filtrer par type d'accès" class="w-56" />
+          <USelectMenu v-model="typeFilter" :items="typeOptions" multiple icon="i-lucide-folder" :placeholder="isSage ? 'Tous les comptes' : 'Tous les types'" aria-label="Filtrer par type de ressource" class="w-44" />
         </div>
       </template>
 

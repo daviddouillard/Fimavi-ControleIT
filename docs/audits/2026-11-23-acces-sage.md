@@ -72,3 +72,15 @@ Autres points :
   - groupes illisibles sans écart inventé ;
   - API injoignable.
 - `npm run test:e2e` : 27/27. Nouveau test : carte Sage non configurée, création d'une session « Accès Sage ».
+
+## Complément : type de compte Sage (même jour)
+
+- **Comptes à privilèges en rouge** (`shared/sageAccounts.ts`) :
+  - `<Administrateur>` est affiché « Compte administrateur » ;
+  - `ComptaAdm` est affiché « Compte ComptaAdm » ;
+  - tous les autres comptes sont des « Compte classique », comptes génériques `Interne` et `Externe` compris.
+- **Nom du compte écrit normalement** : « Administrateur » au lieu de `<Administrateur>`.
+- **Tri des lignes collectées** : par société (dossier Sage), puis les écarts, les comptes à privilèges et les autres, puis par personne.
+- **Filtres de la session** : « Toutes les sociétés », « Tous les groupes », « Tous les comptes ».
+- **Sécurité** : affichage uniquement, sans nouvelle route ni donnée transmise. Les valeurs passent par interpolation Vue, sans `v-html`.
+- **TNR** : typecheck OK, `npm run test` 140/140, `npm run test:e2e` 27/27.

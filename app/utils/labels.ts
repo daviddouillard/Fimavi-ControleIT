@@ -1,3 +1,4 @@
+import { sageLoginText } from '#shared/sageAccounts'
 import { CONTROL_TEMPLATES, type ControlTemplate } from '#shared/schemas/session'
 
 export const SESSION_STATUS_LABELS = {
@@ -34,6 +35,7 @@ const ITEM_FIELDS: [key: string, label: string][] = [
   ['sageDossier', 'Dossier Sage'],
   ['sageSite', 'Site Sage'],
   ['sageLogin', 'Compte Sage'],
+  ['sageAccountType', 'Type de compte'],
   ['personName', 'Personne'],
   ['adAccount', 'Identifiant Windows'],
   ['entraGroups', 'Groupes Entra Sage'],
@@ -64,7 +66,7 @@ const ITEM_FIELDS: [key: string, label: string][] = [
 export function itemFields(data: Record<string, string>): { label: string, value: string }[] {
   return ITEM_FIELDS.filter(([key]) => data[key]).map(([key, label]) => ({
     label,
-    value: key === 'expiresAt' ? formatDateTime(data[key]) : key === 'domainExpiresAt' ? formatDate(data[key]) : data[key]!
+    value: key === 'sageLogin' ? sageLoginText(data[key]!) : key === 'expiresAt' ? formatDateTime(data[key]) : key === 'domainExpiresAt' ? formatDate(data[key]) : data[key]!
   }))
 }
 
