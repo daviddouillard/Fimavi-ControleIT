@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { sageAccountType, sageLoginText } from '#shared/sageAccounts'
+import { sageAccountType } from '#shared/sageAccounts'
 
 /**
  * Ressource d'une ligne : élément SharePoint (icône du type, nom avec lien SharePoint, chemin) ou boîte partagée
@@ -18,22 +18,23 @@ const path = computed(() => sage.value ? props.data.sageDossier! : domain.value 
 const parts = computed(() => sage.value ? [path.value] : path.value.split(' / '))
 const name = computed(() => parts.value.at(-1) ?? path.value)
 const parent = computed(() => {
-  if (sage.value) return props.data.sageLogin ? `Compte ${sageLoginText(props.data.sageLogin)}` : ''
+  if (sage.value) return account.value!.label
   if (domain.value) return [props.data.product, props.data.domainOwner ?? props.data.hostingDomain].filter(Boolean).join(' · ')
   return mailbox.value ? [props.data.mailbox, props.data.tenant].filter(Boolean).join(' · ') : parts.value.slice(0, -1).join(' / ')
 })
-const icon = computed(() => sage.value ? 'i-lucide-database' : domain.value ? GANDI_ICONS[props.data.gandiKind ?? ''] ?? 'i-lucide-globe' : mailbox.value ? 'i-lucide-inbox' : ICONS[props.data.resourceType ?? ''] ?? 'i-lucide-file')
+const icon = computed(() => sage.value ? (account.value!.privileged ? 'i-lucide-shield-alert' : 'i-lucide-database') : domain.value ? GANDI_ICONS[props.data.gandiKind ?? ''] ?? 'i-lucide-globe' : mailbox.value ? 'i-lucide-inbox' : ICONS[props.data.resourceType ?? ''] ?? 'i-lucide-file')
 const link = computed(() => mailbox.value || domain.value || sage.value ? null : sharepointLink(props.data))
-/** Compte Sage : administrateur ou ComptaAdm en rouge, sinon « Compte classique ». */
+/** Compte Sage : administrateur ou ComptaAdm en rouge, sinon « Compte classique » (le nom réel du compte reste dans le détail). */
 const account = computed(() => sage.value ? sageAccountType(props.data.sageLogin) : null)
+const danger = computed(() => !!account.value?.privileged)
 const kind = computed(() => sage.value ? 'Dossier Sage' : domain.value ? props.data.gandiKind ?? 'Nom de domaine' : mailbox.value ? 'Boîte partagée' : props.data.resourceType)
 </script>
 
 <template>
   <div class="flex items-start gap-3">
     <div
-      class="flex shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
-      :class="large ? 'size-11' : 'size-8'"
+      class="flex shrink-0 items-center justify-center rounded-lg"
+      :class="[large ? 'size-11' : 'size-8', danger ? 'bg-error/10 text-error' : 'bg-primary/10 text-primary']"
     >
       <UIcon :name="icon" :class="large ? 'size-5' : 'size-4'" />
     </div>
@@ -50,17 +51,8 @@ const kind = computed(() => sage.value ? 'Dossier Sage' : domain.value ? props.d
       <p v-if="parent || kind" class="mt-0.5 text-xs text-muted break-words" :title="path">
         <span v-if="kind">{{ kind }}</span>
         <span v-if="kind && parent"> · </span>
-        <span v-if="parent">{{ parent }}</span>
+        <span v-if="parent" :class="danger && 'font-medium text-error'">{{ parent }}</span>
       </p>
-      <UBadge
-        v-if="account"
-        class="mt-1.5"
-        :icon="account.privileged ? 'i-lucide-shield-alert' : 'i-lucide-user'"
-        :color="account.privileged ? 'error' : 'neutral'"
-        :variant="account.privileged ? 'solid' : 'soft'"
-        size="sm"
-        :label="account.label"
-      />
     </div>
   </div>
 </template>

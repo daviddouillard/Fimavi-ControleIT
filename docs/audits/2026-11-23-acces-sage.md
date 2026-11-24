@@ -84,3 +84,11 @@ Autres points :
 - **Filtres de la session** : « Toutes les sociétés », « Tous les groupes », « Tous les comptes ».
 - **Sécurité** : affichage uniquement, sans nouvelle route ni donnée transmise. Les valeurs passent par interpolation Vue, sans `v-html`.
 - **TNR** : typecheck OK, `npm run test` 140/140, `npm run test:e2e` 27/27.
+
+## Complément : affichage du type de compte (2026-11-24)
+
+- La colonne « Dossier et compte » affiche « Dossier Sage · Compte classique » pour tout compte autre qu'administrateur ou ComptaAdm (`Interne`, `Externe` ou compte personnel), au lieu du nom du compte. Le badge séparé est supprimé.
+- Comptes administrateur et ComptaAdm : libellé et icône bouclier en rouge.
+- Le nom réel du compte Sage reste visible dans le détail de la ligne et reste pris en compte par la recherche, pour que l'IT sache quel compte retirer.
+- **Sécurité** : affichage seul (`app/components/ShareResource.vue`), interpolation Vue sans `v-html`, aucune route ni donnée nouvelle.
+- **TNR** : typecheck OK, `npm run test` 140/140, `npm run test:e2e` 27/27.
