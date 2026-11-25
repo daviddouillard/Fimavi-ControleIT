@@ -18,6 +18,8 @@ export const createSessionSchema = z.object({
   dueDate: z.iso.datetime({ offset: true }).optional(),
   /** Modèle SharePoint : sites à analyser (au moins un). */
   siteIds: idList.optional(),
+  /** Modèle SharePoint : retenir aussi les invités dont le domaine est un domaine interne du groupe. */
+  includeGroupGuests: z.boolean().optional(),
   /** Modèle boîtes partagées : tenants à analyser (au moins un). */
   connectionIds: idList.optional()
 }).refine(s => s.template !== 'sharepoint-external' || (s.siteIds?.length ?? 0) > 0, {

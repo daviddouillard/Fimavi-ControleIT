@@ -33,7 +33,9 @@ export default defineEventHandler(async (event) => {
       description: input.description,
       template: input.template,
       // Services Gandi et accès Sage : aucune option, tout est lu (organisation du jeton, tous les dossiers Sage).
-      config: input.template === 'exchange-shared-mailboxes' ? { connectionIds } : input.template === 'gandi-domains' || input.template === 'sage-access' ? {} : { siteIds },
+      config: input.template === 'exchange-shared-mailboxes' ? { connectionIds } : input.template === 'gandi-domains' || input.template === 'sage-access'
+        ? {}
+        : { siteIds, ...(input.includeGroupGuests ? { includeGroupGuests: true } : {}) },
       dueDate: input.dueDate ? new Date(input.dueDate) : null,
       createdById: admin.id
     }).returning()

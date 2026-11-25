@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { exemptDomains } from '../../server/controls/sharepoint-external'
 import { emailFromLogin, externalGrants, isInternalDomain, isTenantMemberLogin } from '../../server/controls/sharepoint-external/permissions'
 
 const internal = new Set(['fimavi.com', 'filiale.fr'])
@@ -63,6 +64,17 @@ describe('externalGrants', () => {
   it('ignore les groupes et les comptes internes', () => {
     expect(externalGrants({ id: 'p5', roles: ['write'], grantedToV2: { siteGroup: { displayName: 'Membres' } } }, internal)).toEqual([])
     expect(externalGrants({ id: 'p6', roles: ['write'], grantedToV2: { user: { email: 'jean@fimavi.com' } } }, internal)).toEqual([])
+  })
+
+  it('option « invités du groupe » : un invité d\'un domaine interne remonte, un membre du tenant jamais', () => {
+    const domains = exemptDomains(true, internal)
+    expect(exemptDomains(undefined, internal)).toBe(internal)
+    const guest = { siteUser: { displayName: 'Paul filiale', loginName: 'i:0#.f|membership|paul_filiale.fr#ext#@fimavi.onmicrosoft.com' } }
+    expect(externalGrants({ id: 'g1', roles: ['read'], grantedToV2: guest }, internal)).toEqual([])
+    expect(externalGrants({ id: 'g1', roles: ['read'], grantedToV2: guest }, domains)).toEqual([expect.objectContaining({ email: 'paul@filiale.fr', access: 'direct' })])
+    const member = { siteUser: { displayName: 'Jean', email: 'jean@fimavi.com', loginName: 'i:0#.f|membership|jean@fimavi.com' } }
+    expect(externalGrants({ id: 'g2', roles: ['write'], grantedToV2: member }, domains)).toEqual([])
+    expect(externalGrants({ id: 'g3', roles: ['write'], grantedToV2: { user: { id: 'u-jean', email: 'jean@fimavi.com' } } }, domains, new Set(['u-jean']))).toEqual([])
   })
 
   it('ignore un compte membre du tenant, même hors des domaines internes (compte admin onmicrosoft.com)', () => {

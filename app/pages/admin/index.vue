@@ -241,6 +241,13 @@ const kpis = computed(() => [
                 @update:model-value="(v: boolean | 'indeterminate') => toggleSite(site.id, v === true)"
               />
             </div>
+            <USeparator class="my-3" />
+            <UCheckbox
+              :model-value="form.includeGroupGuests === true"
+              label="Inclure les invités des domaines du groupe"
+              description="Tous les comptes invités remontent, même ceux d'un domaine interne (filiale invitée…). Les collègues membres du tenant restent écartés."
+              @update:model-value="(v: boolean | 'indeterminate') => form.includeGroupGuests = v === true"
+            />
           </fieldset>
           <fieldset v-if="isMailboxes" class="space-y-1">
             <legend class="mb-1 text-sm font-medium">Tenants à analyser</legend>

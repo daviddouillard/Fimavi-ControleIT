@@ -8,7 +8,19 @@ import { fetchSharingEvents, indexByObject, managerOf, matchAuthor, startSharing
 import { collectSiteShares, type CollectedLine } from './collect'
 import { ACCESS_LABELS } from './permissions'
 
-export const sharepointConfigSchema = z.object({ siteIds: z.array(z.uuid()).min(1).max(500) })
+export const sharepointConfigSchema = z.object({
+  siteIds: z.array(z.uuid()).min(1).max(500),
+  /** Invités (#ext#) des domaines internes du groupe retenus aussi : seuls les membres du tenant restent écartés. */
+  includeGroupGuests: z.boolean().optional()
+})
+
+/**
+ * Domaines dont les invités ne sont pas retenus. Avec l'option « invités du groupe » de la session, aucun :
+ * tous les comptes invités remontent ; les membres du tenant restent écartés par ailleurs.
+ */
+export function exemptDomains(includeGroupGuests: boolean | undefined, internalDomains: ReadonlySet<string>): ReadonlySet<string> {
+  return includeGroupGuests ? new Set() : internalDomains
+}
 
 export interface SharepointDeps {
   graphFor: (tenantId: string) => GraphClient
@@ -36,10 +48,11 @@ export async function tenantMemberIds(db: Pick<Database, 'select'>, tenantId: st
 export function sharepointModule(deps: SharepointDeps): ControlModule {
   return {
     async collect(ctx: CollectionContext) {
-      const { siteIds } = sharepointConfigSchema.parse(ctx.config)
+      const { siteIds, includeGroupGuests } = sharepointConfigSchema.parse(ctx.config)
       const sites = await sessionSites(ctx.db, siteIds)
       if (!sites.length) throw new Error('Aucun site actif à analyser')
       if (!ctx.internalDomains.size) throw new Error('Aucun domaine interne paramétré')
+      const internal = exemptDomains(includeGroupGuests, ctx.internalDomains)
 
       // Auteurs des partages : la recherche dans le journal d'audit est lancée tout de suite (elle prend plusieurs
       // minutes côté Microsoft) et exploitée une fois tous les sites parcourus.
@@ -62,7 +75,7 @@ export function sharepointModule(deps: SharepointDeps): ControlModule {
             memberIds = await tenantMemberIds(ctx.db, site.tenantId)
             membersByTenant.set(site.tenantId, memberIds)
           }
-          const { lines, fullControl } = await collectSiteShares(deps.graphFor(site.tenantId), { url: site.url, tenantId: site.tenantId, tenantName: site.tenantName, memberIds }, ctx.internalDomains,
+          const { lines, fullControl } = await collectSiteShares(deps.graphFor(site.tenantId), { url: site.url, tenantId: site.tenantId, tenantName: site.tenantName, memberIds }, internal,
             p => ctx.progress({ site: site.url, sitesDone: index, sitesTotal: sites.length, ...p }))
           await ctx.addLines(lines)
           collected.push(...lines.map(line => ({ tenantId: site.tenantId, line })))

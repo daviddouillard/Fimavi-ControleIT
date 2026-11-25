@@ -51,7 +51,7 @@ export async function startCollection(db: Database, actor: Actor, sessionId: str
       .where(eq(controlSessions.id, sessionId)).for('update')
     if (!session) throw createError({ status: 404, message: 'Session introuvable' })
     if (session.status !== 'draft') throw createError({ status: 409, message: 'La collecte n\'est possible que sur une session en brouillon' })
-    if (!(await listDomains(tx)).length) throw createError({ status: 400, message: 'Renseignez d\'abord les domaines internes dans les paramètres' })
+    if (!(await listDomains(tx)).length) throw createError({ status: 400, message: 'Renseignez d\'abord les domaines internes dans les paramètres : sans eux, les valideurs ne peuvent pas se connecter' })
 
     await failStaleRuns(tx, sessionId)
     const [running] = await tx.select({ id: collectionRuns.id }).from(collectionRuns)
